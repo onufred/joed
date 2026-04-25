@@ -324,17 +324,30 @@ function saveEd(id){
 function del(id){if(!confirm('Kustuta?'))return;rivers=rivers.filter(r=>r.id!==id);lsSave();render();}
 
 function filterSt(){
-  const q=(document.getElementById('ssrch').value||'').toLowerCase();
-  filtSt=q?allSt.filter(s=>s.jaam.toLowerCase().includes(q)||s.veekogu.toLowerCase().includes(q)):[...allSt];
+  let q=(document.getElementById('ssrch').value||'').toLowerCase().trim();
+  // Eemalda diakriitikud (Võ -> vo, ä -> a)
+  const norm=s=>s.toLowerCase().replace(/[õö]/g,'o').replace(/[ä]/g,'a').replace(/[ü]/g,'u');
+  q=norm(q);
+  filtSt=q?allSt.filter(s=>norm(s.jaam).includes(q)||norm(s.veekogu).includes(q)):[...allSt];
   renderSt();
 }
 function renderSt(){
   const el=document.getElementById('slist');if(!el)return;
-  if(filtSt.length===0){el.innerHTML=`<div style="padding:9px 12px;font-size:12px;color:var(--text3);">${allSt.length===0?'Andmed laetakse...':'Ei leitud'}</div>`;return;}
-  el.innerHTML=filtSt.map(s=>`<div class="si ${selSt&&selSt.jaam===s.jaam?'sel':''}" onclick="pickSt(${JSON.stringify(s.jaam)})">
-    <div>${s.veekogu} — ${s.jaam}</div>
-    <div class="si-sub">${s.level} cm</div>
+  if(filtSt.length===0){
+    el.innerHTML=`<div style="padding:9px 12px;font-size:12px;color:var(--text3);">${allSt.length===0?'Andmed laetakse...':'Ei leitud — proovi teist sõna'}</div>`;
+    return;
+  }
+  el.innerHTML=filtSt.map((s,i)=>`<div class="si ${selSt&&selSt.jaam===s.jaam?'sel':''}" onclick="pickStByIdx(${i})">
+    <div><b>${s.veekogu}</b></div>
+    <div class="si-sub">${s.jaam} · ${s.level} cm</div>
   </div>`).join('');
+}
+
+function pickStByIdx(idx){
+  selSt=filtSt[idx];
+  renderSt();
+  const el=document.getElementById('seli');
+  if(el&&selSt)el.textContent=`✓ ${selSt.veekogu} / ${selSt.jaam} — ${selSt.level} cm`;
 }
 function pickSt(jaam){
   selSt=allSt.find(s=>s.jaam===jaam);renderSt();
@@ -348,12 +361,21 @@ function stab(t){
   document.getElementById('tb-l').classList.toggle('active',t==='l');
   document.getElementById('tb-m').classList.toggle('active',t==='m');
 }
-function openM(){selSt=null;document.getElementById('modal').classList.add('open');filtSt=[...allSt];renderSt();}
+function openM(){
+  selSt=null;
+  document.getElementById('modal').classList.add('open');
+  document.getElementById('ssrch').value='';
+  filtSt=[...allSt];
+  renderSt();
+  // Lähtesta selectInfo ka
+  const el=document.getElementById('seli');
+  if(el)el.textContent=allSt.length>0?`${allSt.length} jaama saadaval — vajuta ühele`:'Andmed pole veel laetud';
+}
 function closeM(){document.getElementById('modal').classList.remove('open');selSt=null;}
 function addR(){
   const err=document.getElementById('merr');err.style.display='none';
   if(atab==='l'){
-    if(!selSt){err.textContent='Palun vali jaam.';err.style.display='block';return;}
+    if(!selSt){err.textContent='Palun vali jaam nimekirjast (vajuta sellele).';err.style.display='block';return;}
     rivers.push({id:Date.now(),jogi:selSt.veekogu,jaam:selSt.jaam,stJaam:selSt.jaam,isLive:true,
       level:selSt.level,kayakMin:parseInt(document.getElementById('pkm').value)||40,
       raftMin:parseInt(document.getElementById('prm').value)||60,
