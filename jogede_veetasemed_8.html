@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jõgede Veetasemed</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f0ede8; --surface: #faf9f7; --surface2: #e8e4dd; --border: #d4cfc6;
+    --text: #1a1916; --text2: #6b6660; --text3: #9b958e;
+    --green: #1a6b4a; --green-bg: #e0f2ea;
+    --orange: #9a4e00; --orange-bg: #fdecd8;
+    --red: #8b1a1a; --red-bg: #fde0e0;
+    --grey: #5a5550; --grey-bg: #ece9e4;
+    --accent: #2d5a3d; --radius: 10px;
+  }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; position: sticky; top: 0; z-index: 10; }
+  .logo { font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; color: var(--accent); }
+  .logo span { color: var(--text3); font-weight: 400; }
+  .last-update { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; margin-top: 2px; }
+  .header-right { display: flex; gap: 8px; }
+  .btn { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; transition: all .15s; }
+  .btn:hover { background: var(--surface2); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: #234a31; }
+  main { padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
+  .status-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 12px; color: var(--text3); font-family: 'DM Mono', monospace; }
+  .sdot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+  .sdot.loading { animation: pulse 1.2s infinite; }
+  .sdot.err { background: #dc2626; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; position: relative; }
+  .card::before { content:''; position:absolute; left:0; top:12px; bottom:12px; width:3px; border-radius:0 2px 2px 0; }
+  .card.ok::before{background:var(--green)}.card.warn::before{background:#d97706}
+  .card.danger::before{background:#dc2626}.card.low::before{background:var(--border)}.card.loading::before{background:var(--border)}
+  .card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:10px; }
+  .card-title { font-size:15px; font-weight:600; }
+  .card-sub { font-size:11px; color:var(--text3); margin-top:2px; font-family:'DM Mono',monospace; }
+  .badge { font-size:10px; font-weight:600; padding:3px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:.3px; white-space:nowrap; flex-shrink:0; }
+  .badge-ok{background:var(--green-bg);color:var(--green)}.badge-warn{background:var(--orange-bg);color:var(--orange)}
+  .badge-danger{background:var(--red-bg);color:var(--red)}.badge-low,.badge-loading{background:var(--grey-bg);color:var(--grey)}
+  .level-big { display:flex; align-items:baseline; gap:4px; margin:4px 0 12px; }
+  .level-num { font-family:'DM Mono',monospace; font-size:36px; font-weight:500; line-height:1; }
+  .level-unit { font-size:14px; color:var(--text3); }
+  .level-na { font-family:'DM Mono',monospace; font-size:24px; color:var(--text3); }
+  .bar-track { height:6px; background:var(--surface2); border-radius:3px; position:relative; overflow:visible; margin:10px 0 18px; }
+  .bar-fill { height:100%; border-radius:3px; transition:width .5s; }
+  .bar-mk { position:absolute; top:-5px; width:1.5px; height:16px; border-radius:1px; transform:translateX(-50%); }
+  .bar-lbl { position:absolute; top:14px; font-size:9px; font-family:'DM Mono',monospace; color:var(--text3); transform:translateX(-50%); white-space:nowrap; }
+  .bar-ends { display:flex; justify-content:space-between; font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; }
+  .pills { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .pill { font-size:11px; font-weight:500; padding:4px 10px; border-radius:20px; border:1px solid; display:inline-flex; align-items:center; gap:4px; }
+  .pill-on{background:var(--green-bg);color:var(--green);border-color:#a7d9bc}
+  .pill-off{background:var(--grey-bg);color:var(--text3);border-color:var(--border);text-decoration:line-through;opacity:.6}
+  .pill-warn{background:var(--orange-bg);color:var(--orange);border-color:#f0b97a}
+  .pill-danger{background:var(--red-bg);color:var(--red);border-color:#f5a0a0}
+  .card-foot { display:flex; align-items:center; justify-content:space-between; padding-top:10px; border-top:1px solid var(--surface2); gap:6px; flex-wrap:wrap; }
+  .foot-src { font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; display:flex; align-items:center; gap:4px; }
+  .fdot { width:5px; height:5px; border-radius:50%; }
+  .fdot.live{background:var(--green)}.fdot.man{background:var(--text3)}
+  .foot-btns { display:flex; gap:4px; align-items:center; }
+  .ibtn { font-size:11px; padding:3px 8px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--text2); cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .ibtn:hover { background:var(--surface2); }
+  .sp { background:var(--bg); border-radius:8px; padding:12px; margin-top:10px; }
+  .sp-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+  .sp-row label { font-size:11px; color:var(--text2); min-width:120px; }
+  .sp-row input { width:64px; font-size:12px; padding:4px 7px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); text-align:right; font-family:'DM Mono',monospace; }
+  .man-inp { width:64px; font-size:12px; padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); text-align:right; font-family:'DM Mono',monospace; }
+  .err-txt { font-size:10px; color:var(--red); margin-top:4px; }
+  .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:100; align-items:center; justify-content:center; }
+  .overlay.open { display:flex; }
+  .modal { background:var(--surface); border-radius:14px; border:1px solid var(--border); padding:22px; width:360px; max-width:94vw; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.15); }
+  .modal-title { font-size:16px; font-weight:600; margin-bottom:14px; }
+  .tabs { display:flex; gap:4px; margin-bottom:12px; background:var(--bg); border-radius:8px; padding:3px; }
+  .tab { flex:1; font-size:12px; font-weight:500; padding:5px; border-radius:6px; border:none; background:transparent; color:var(--text2); cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .tab.active { background:var(--surface); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.1); }
+  .mrow { margin-bottom:10px; }
+  .mrow label { display:block; font-size:11px; color:var(--text2); margin-bottom:4px; font-weight:500; }
+  .mrow input { width:100%; font-size:13px; padding:7px 10px; border-radius:7px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; }
+  .mgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .mact { display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
+  .merr { background:var(--red-bg); border:1px solid #f5a0a0; border-radius:7px; padding:7px 10px; font-size:12px; color:var(--red); margin:6px 0; display:none; }
+  .slist { max-height:210px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; margin-top:4px; }
+  .si { padding:10px 12px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--surface2); transition:background .1s; user-select:none; -webkit-tap-highlight-color:rgba(45,90,61,.2); }
+  .si:active{background:var(--green-bg)!important;}
+  .si:last-child{border-bottom:none}.si:hover{background:var(--bg)}.si.sel{background:var(--green-bg);color:var(--green)}
+  .si-sub { font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; margin-top:1px; }
+  .ssrch { width:100%; font-size:13px; padding:7px 10px; border-radius:7px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; margin-bottom:6px; }
+  .empty { text-align:center; padding:40px 20px; color:var(--text3); font-size:14px; grid-column:1/-1; }
+  @media(max-width:600px){main{padding:14px}header{padding:12px 14px}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="logo">jõed<span>.ee</span></div>
+    <div class="last-update" id="lupd">—</div>
+  </div>
+  <div class="header-right">
+    <button class="btn" id="rbtn" onclick="refreshAll()">↻ Uuenda</button>
+    <button class="btn btn-primary" onclick="openM()">+ Lisa jõgi</button>
+  </div>
+</header>
+<main>
+  <div class="status-bar">
+    <span class="sdot loading" id="sdot"></span>
+    <span id="stxt">Ühendun Keskkonnaagentuuri andmetega...</span>
+  </div>
+  <div class="grid" id="grid"></div>
+</main>
+
+<div class="overlay" id="modal">
+  <div class="modal">
+    <div class="modal-title">Lisa jõgi jälgimisele</div>
+    <div class="tabs">
+      <button class="tab active" id="tb-l" onclick="stab('l')">Automaatjaam</button>
+      <button class="tab" id="tb-m" onclick="stab('m')">Käsitsi</button>
+    </div>
+    <div id="tp-l">
+      <p style="font-size:11px;color:var(--text3);margin-bottom:8px;">Andmed uuenevad automaatselt Keskkonnaagentuuri mõõtejaamadest.</p>
+      <input class="ssrch" id="ssrch" type="text" placeholder="Otsi jõge või jaama..." oninput="filterSt()"/>
+      <div class="slist" id="slist"></div>
+      <div id="seli" style="font-size:11px;color:var(--text3);margin:6px 0;min-height:16px;"></div>
+      <div class="mgrid">
+        <div class="mrow"><label>Isiklik miinimum (cm)</label><input id="ppm" type="number" placeholder="(valikuline)"/></div>
+        <div class="mrow"><label>Min kajak (cm)</label><input id="pkm" type="number" placeholder="40"/></div>
+        <div class="mrow"><label>Min rafting (cm)</label><input id="prm" type="number" placeholder="60"/></div>
+        <div class="mrow"><label>Max ohutu (cm)</label><input id="pms" type="number" placeholder="150"/></div>
+        <div class="mrow"><label>Absoluutne max</label><input id="pam" type="number" placeholder="200"/></div>
+      </div>
+    </div>
+    <div id="tp-m" style="display:none">
+      <div class="mrow"><label>Jõe nimi</label><input id="mn" type="text" placeholder="Jägala"/></div>
+      <div class="mrow"><label>Asukoht</label><input id="ml" type="text" placeholder="Jägala-Jõesuu"/></div>
+      <div class="mrow"><label>Veetase (cm)</label><input id="mv" type="number" placeholder="80"/></div>
+      <div class="mgrid">
+        <div class="mrow"><label>Isiklik miinimum (cm)</label><input id="mpm" type="number" placeholder="(valikuline)"/></div>
+        <div class="mrow"><label>Min kajak (cm)</label><input id="mkm" type="number" placeholder="40"/></div>
+        <div class="mrow"><label>Min rafting (cm)</label><input id="mrm" type="number" placeholder="60"/></div>
+        <div class="mrow"><label>Max ohutu (cm)</label><input id="mms" type="number" placeholder="150"/></div>
+        <div class="mrow"><label>Absoluutne max</label><input id="mam" type="number" placeholder="200"/></div>
+      </div>
+    </div>
+    <div class="merr" id="merr"></div>
+    <div class="mact">
+      <button class="btn" onclick="closeM()">Tühista</button>
+      <button class="btn btn-primary" onclick="addR()">Lisa jõgi</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SK='rv9';
+// A=Veekogu, B=Jaam, C=Veetase(cm) — täpselt sinu Sheetsi struktuur
+const SHEET_ID='1ih6_OZSzPpxQvK4-kdfyMdZDO8j0C_CTPtMTjH3KFkY';
+const GVIZ='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=0';
+
+let rivers=[], liveData={}, allSt=[], filtSt=[], selSt=null, editId=null, atab='l', busy=false, lupd=null;
+
+function lsLoad(){try{const r=localStorage.getItem(SK);if(r)return JSON.parse(r);}catch(e){}return null;}
+function lsSave(){try{localStorage.setItem(SK,JSON.stringify(rivers));}catch(e){}}
+
+// parseCSV eemaldatud — kasutame gviz JSON API-t
+
+async function loadCSV(){
+  // gviz API tagastab CORS-toetusega JSON, mis töötab ka file:// origin'ist
+  const resp=await fetch(GVIZ,{cache:'no-cache'});
+  if(!resp.ok)throw new Error('HTTP '+resp.status);
+  const raw=await resp.text();
+  // gviz vastus on kujul: /*O_o*/\ngoogle.visualization.Query.setResponse({...});
+  const m=raw.match(/setResponse\(([\s\S]+)\);?\s*$/);
+  if(!m)throw new Error('Vale gviz vastus');
+  const data=JSON.parse(m[1]);
+  if(!data.table||!data.table.rows)throw new Error('Tabel puudub');
+  liveData={};allSt=[];
+  // Iga rida sisaldab: c[0]=Veekogu, c[1]=Jaam, c[2]=Veetase
+  for(const row of data.table.rows){
+    const c=row.c;
+    if(!c||c.length<3)continue;
+    const veekogu=(c[0]&&c[0].v!=null)?String(c[0].v).trim():'';
+    const jaam=(c[1]&&c[1].v!=null)?String(c[1].v).trim():'';
+    const lvlRaw=(c[2]&&c[2].v!=null)?c[2].v:null;
+    if(!veekogu&&!jaam)continue;
+    const lvl=typeof lvlRaw==='number'?lvlRaw:parseFloat(String(lvlRaw).replace(',','.'));
+    if(isNaN(lvl))continue;
+    const key=jaam.toLowerCase();
+    liveData[key]={level:Math.round(lvl),jaam,veekogu};
+    allSt.push({jaam,veekogu,level:Math.round(lvl)});
+  }
+  lupd=new Date().toISOString();
+}
+
+function findSt(jaaNimi){
+  const k=jaaNimi.toLowerCase();
+  if(liveData[k])return liveData[k];
+  for(const[key,v]of Object.entries(liveData)){
+    if(key.includes(k)||k.includes(key))return v;
+  }
+  return null;
+}
+
+async function refreshAll(){
+  if(busy)return;
+  busy=true;
+  const btn=document.getElementById('rbtn');
+  btn.disabled=true;btn.textContent='Laeb...';
+  document.getElementById('sdot').className='sdot loading';
+  document.getElementById('stxt').textContent='Laen andmeid...';
+  render();
+  try{
+    await loadCSV();
+    for(const r of rivers){
+      if(r.isLive&&r.stJaam){
+        const m=findSt(r.stJaam);
+        if(m){r.level=m.level;r.updated=lupd;r.err=null;}
+        else r.err='Jaama ei leitud';
+      }
+    }
+    lsSave();
+    const cnt=allSt.length;
+    document.getElementById('stxt').textContent=`${cnt} jaama laetud · ${fmt(lupd)}`;
+    document.getElementById('sdot').className='sdot';
+    document.getElementById('lupd').textContent=fmt(lupd);
+    filtSt=[...allSt];
+  }catch(e){
+    document.getElementById('stxt').textContent='Viga: '+e.message;
+    document.getElementById('sdot').className='sdot err';
+  }
+  busy=false;btn.disabled=false;btn.textContent='↻ Uuenda';
+  render();
+}
+
+function st(r){
+  if(r.level===null)return r.err?'low':'loading';
+  if(r.level>=r.absMax||r.level>=r.maxSafe)return 'danger';
+  if(r.level>=r.maxSafe*0.85)return 'warn';
+  if(r.level<r.kayakMin)return 'low';
+  return 'ok';
+}
+function slbl(r){
+  const s=st(r);
+  if(s==='loading')return['badge-loading','Laeb'];
+  if(s==='danger')return['badge-danger',r.level>=r.absMax?'Ohtlik':'Liiga kõrge'];
+  if(s==='warn')return['badge-warn','Kõrge'];
+  if(s==='low')return['badge-low',r.err?'Viga':'Madal'];
+  return['badge-ok','Sobiv'];
+}
+function bcol(r){const s=st(r);return s==='danger'?'#dc2626':s==='warn'?'#d97706':s==='low'?'#9ca3af':'#1a6b4a';}
+function pct(v,m){return Math.min(97,Math.round(v/m*100));}
+function spill(r,t){
+  const min=t==='k'?r.kayakMin:r.raftMin,lbl=t==='k'?'🛶 Kajak':'🚣 Rafting';
+  if(r.level===null)return`<span class="pill pill-off">${lbl}</span>`;
+  if(r.level>=r.absMax||r.level>=r.maxSafe)return`<span class="pill pill-danger">✕ ${lbl}</span>`;
+  if(r.level<min)return`<span class="pill pill-off">↓ ${lbl}</span>`;
+  if(r.level>=r.maxSafe*0.85)return`<span class="pill pill-warn">⚠ ${lbl}</span>`;
+  return`<span class="pill pill-on">✓ ${lbl}</span>`;
+}
+function fmt(iso){
+  if(!iso)return'—';
+  try{const d=new Date(iso);return d.toLocaleTimeString('et-EE',{hour:'2-digit',minute:'2-digit'})+' '+d.toLocaleDateString('et-EE');}catch(e){return iso;}
+}
+
+function renderCard(r){
+  const s=st(r),[bc,bl]=slbl(r),mx=r.absMax,bp=r.level!==null?Math.min(100,Math.round(r.level/mx*100)):0,ed=editId===r.id;
+  return`<div class="card ${s}">
+    <div class="card-head">
+      <div><div class="card-title">${r.jogi}</div><div class="card-sub">${r.stJaam||r.jaam}</div></div>
+      <span class="badge ${bc}">${bl}</span>
+    </div>
+    <div class="level-big">
+      ${r.level!==null?`<span class="level-num">${r.level}</span><span class="level-unit">cm</span>`:`<span class="level-na">${busy?'···':'?'}</span>`}
+    </div>
+    ${r.err?`<div class="err-txt">⚠ ${r.err}</div>`:''}
+    <div class="bar-track">
+      <div class="bar-fill" style="width:${bp}%;background:${bcol(r)};"></div>
+      ${r.personalMin!=null?`<div class="bar-mk" style="left:${pct(r.personalMin,mx)}%;background:#7c3aed;height:18px;top:-6px;width:2px;"></div>
+      <span class="bar-lbl" style="left:${pct(r.personalMin,mx)}%;color:#7c3aed;font-weight:600;top:16px;">M</span>`:''}
+      <div class="bar-mk" style="left:${pct(r.kayakMin,mx)}%;background:#1a6b4a;"></div>
+      <span class="bar-lbl" style="left:${pct(r.kayakMin,mx)}%;">K</span>
+      <div class="bar-mk" style="left:${pct(r.raftMin,mx)}%;background:#2d7a55;"></div>
+      <span class="bar-lbl" style="left:${pct(r.raftMin,mx)}%;">R</span>
+      <div class="bar-mk" style="left:${pct(r.maxSafe,mx)}%;background:#dc2626;"></div>
+      <span class="bar-lbl" style="left:${pct(r.maxSafe,mx)}%;">!</span>
+    </div>
+    <div class="bar-ends"><span>0</span><span>${mx} cm</span></div>
+    <div class="pills" style="margin-top:10px;">${spill(r,'k')}${spill(r,'r')}</div>
+    <div class="card-foot">
+      <span class="foot-src"><span class="fdot ${r.isLive?'live':'man'}"></span>${r.isLive?'KA · ':'Käsitsi · '}${fmt(r.updated)}</span>
+      <div class="foot-btns">
+        ${!r.isLive?`<input class="man-inp" type="number" id="mi-${r.id}" value="${r.level||0}" min="0"/>
+          <button class="ibtn" onclick="setMan(${r.id})">OK</button>`:''}
+        <button class="ibtn" onclick="tog(${r.id})">${ed?'✕':'⚙'}</button>
+        <button class="ibtn" onclick="del(${r.id})">🗑</button>
+      </div>
+    </div>
+    ${ed?`<div class="sp">
+      <div class="sp-row"><label>Isiklik miinimum (cm)</label><input type="number" id="ep-${r.id}" value="${r.personalMin!=null?r.personalMin:''}" placeholder="(valikuline)"/></div>
+      <div class="sp-row"><label>Min kajak (cm)</label><input type="number" id="ek-${r.id}" value="${r.kayakMin}"/></div>
+      <div class="sp-row"><label>Min rafting (cm)</label><input type="number" id="er-${r.id}" value="${r.raftMin}"/></div>
+      <div class="sp-row"><label>Max ohutu (cm)</label><input type="number" id="em-${r.id}" value="${r.maxSafe}"/></div>
+      <div class="sp-row"><label>Absoluutne max</label><input type="number" id="ea-${r.id}" value="${r.absMax}"/></div>
+      <div style="margin-top:8px;"><button class="btn" style="font-size:12px;padding:5px 12px;" onclick="saveEd(${r.id})">Salvesta</button></div>
+    </div>`:''}
+  </div>`;
+}
+
+function render(){
+  const g=document.getElementById('grid');if(!g)return;
+  if(rivers.length===0){
+    g.innerHTML=`<div class="empty">${allSt.length>0?'Lisa jõgi nupuga "+ Lisa jõgi"':busy?'Laeb...':'Andmed laetakse...'}</div>`;
+    return;
+  }
+  g.innerHTML=rivers.map(renderCard).join('');
+}
+
+function setMan(id){const v=parseInt(document.getElementById('mi-'+id).value,10);if(isNaN(v))return;rivers=rivers.map(r=>r.id===id?{...r,level:v,updated:new Date().toISOString()}:r);lsSave();render();}
+function tog(id){editId=editId===id?null:id;render();}
+function saveEd(id){
+  const g=k=>parseInt(document.getElementById(k+id).value,10);
+  const[km,rm,ms,am]=[g('ek-'),g('er-'),g('em-'),g('ea-')];
+  if([km,rm,ms,am].some(isNaN))return;
+  // Isiklik miinimum on valikuline
+  const pmRaw=document.getElementById('ep-'+id).value.trim();
+  const pm=pmRaw===''?null:parseInt(pmRaw,10);
+  const pmFinal=(pm===null||isNaN(pm))?null:pm;
+  rivers=rivers.map(r=>r.id===id?{...r,kayakMin:km,raftMin:rm,maxSafe:ms,absMax:am,personalMin:pmFinal}:r);
+  editId=null;lsSave();render();
+}
+function del(id){if(!confirm('Kustuta?'))return;rivers=rivers.filter(r=>r.id!==id);lsSave();render();}
+
+function filterSt(){
+  let q=(document.getElementById('ssrch').value||'').toLowerCase().trim();
+  const norm=s=>s.toLowerCase().replace(/[õö]/g,'o').replace(/[ä]/g,'a').replace(/[ü]/g,'u');
+  q=norm(q);
+  filtSt=q?allSt.filter(s=>norm(s.jaam).includes(q)||norm(s.veekogu).includes(q)):[...allSt];
+  // Kui ainult 1 tulemus, vali see automaatselt
+  if(q&&filtSt.length===1){
+    selSt=filtSt[0];
+    const el=document.getElementById('seli');
+    if(el)el.textContent=`✓ ${selSt.veekogu} / ${selSt.jaam} — ${selSt.level} cm`;
+  }
+  renderSt();
+}
+function renderSt(){
+  const el=document.getElementById('slist');if(!el)return;
+  if(filtSt.length===0){
+    el.innerHTML=`<div style="padding:9px 12px;font-size:12px;color:var(--text3);">${allSt.length===0?'Andmed laetakse...':'Ei leitud — proovi teist sõna'}</div>`;
+    return;
+  }
+  el.innerHTML=filtSt.map((s,i)=>`<div class="si ${selSt&&selSt.jaam===s.jaam?'sel':''}" onclick="pickStByIdx(${i})">
+    <div><b>${s.veekogu}</b></div>
+    <div class="si-sub">${s.jaam} · ${s.level} cm</div>
+  </div>`).join('');
+}
+
+function pickStByIdx(idx){
+  selSt=filtSt[idx];
+  renderSt();
+  const el=document.getElementById('seli');
+  if(el&&selSt)el.textContent=`✓ ${selSt.veekogu} / ${selSt.jaam} — ${selSt.level} cm`;
+}
+function pickSt(jaam){
+  selSt=allSt.find(s=>s.jaam===jaam);renderSt();
+  const el=document.getElementById('seli');
+  if(el&&selSt)el.textContent=`✓ ${selSt.veekogu} / ${selSt.jaam} — ${selSt.level} cm`;
+}
+function stab(t){
+  atab=t;
+  document.getElementById('tp-l').style.display=t==='l'?'block':'none';
+  document.getElementById('tp-m').style.display=t==='m'?'block':'none';
+  document.getElementById('tb-l').classList.toggle('active',t==='l');
+  document.getElementById('tb-m').classList.toggle('active',t==='m');
+}
+function openM(){
+  selSt=null;
+  document.getElementById('modal').classList.add('open');
+  document.getElementById('ssrch').value='';
+  filtSt=[...allSt];
+  renderSt();
+  // Lähtesta selectInfo ka
+  const el=document.getElementById('seli');
+  if(el)el.textContent=allSt.length>0?`${allSt.length} jaama saadaval — vajuta ühele`:'Andmed pole veel laetud';
+}
+function closeM(){document.getElementById('modal').classList.remove('open');selSt=null;}
+function addR(){
+  const err=document.getElementById('merr');err.style.display='none';
+  if(atab==='l'){
+    if(!selSt){err.textContent='Palun vali jaam nimekirjast (vajuta sellele).';err.style.display='block';return;}
+    const ppmVal=parseInt(document.getElementById('ppm').value);
+    rivers.push({id:Date.now(),jogi:selSt.veekogu,jaam:selSt.jaam,stJaam:selSt.jaam,isLive:true,
+      level:selSt.level,kayakMin:parseInt(document.getElementById('pkm').value)||40,
+      raftMin:parseInt(document.getElementById('prm').value)||60,
+      maxSafe:parseInt(document.getElementById('pms').value)||150,
+      absMax:parseInt(document.getElementById('pam').value)||200,
+      personalMin:isNaN(ppmVal)?null:ppmVal,
+      updated:lupd,err:null});
+  }else{
+    const name=document.getElementById('mn').value.trim();
+    if(!name){err.textContent='Palun sisesta nimi.';err.style.display='block';return;}
+    const mpmVal=parseInt(document.getElementById('mpm').value);
+    rivers.push({id:Date.now(),jogi:name,jaam:document.getElementById('ml').value.trim()||'—',
+      stJaam:null,isLive:false,level:parseInt(document.getElementById('mv').value)||50,
+      kayakMin:parseInt(document.getElementById('mkm').value)||40,
+      raftMin:parseInt(document.getElementById('mrm').value)||60,
+      maxSafe:parseInt(document.getElementById('mms').value)||150,
+      absMax:parseInt(document.getElementById('mam').value)||200,
+      personalMin:isNaN(mpmVal)?null:mpmVal,
+      updated:new Date().toISOString(),err:null});
+  }
+  lsSave();closeM();render();
+}
+
+async function init(){
+  const saved=lsLoad();
+  if(saved&&saved.length>0)rivers=saved.map(r=>({...r,err:null}));
+  render();
+  await refreshAll();
+  if(!saved||saved.length===0){
+    const defs=[
+      {jaam:'Kirumpää',jogi:'Võhandu',km:40,rm:70,ms:180,am:250},
+      {jaam:'Kääpa',jogi:'Kääpa',km:30,rm:50,ms:150,am:200},
+      {jaam:'Torma',jogi:'Avijõgi',km:35,rm:60,ms:160,am:220},
+      {jaam:'Rannapungerja',jogi:'Rannapungerja',km:30,rm:55,ms:150,am:200},
+      {jaam:'Riisa',jogi:'Pärnu',km:50,rm:90,ms:180,am:250},
+    ];
+    for(const d of defs){
+      const m=findSt(d.jaam);
+      if(m)rivers.push({id:Date.now()+Math.random(),jogi:d.jogi||m.veekogu,jaam:m.jaam,stJaam:m.jaam,
+        isLive:true,level:m.level,kayakMin:d.km,raftMin:d.rm,maxSafe:d.ms,absMax:d.am,
+        updated:lupd,err:null});
+    }
+    lsSave();render();
+  }
+}
+init();
+</script>
+</body>
+</html>
