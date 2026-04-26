@@ -109,6 +109,7 @@
   </div>
   <div class="header-right">
     <button class="btn" id="rbtn" onclick="refreshAll()">↻ Uuenda</button>
+    <button class="btn" onclick="exportSettings()">📤 Ekspordi</button>
     <button class="btn btn-primary" onclick="openM()">+ Lisa jõgi</button>
   </div>
 </header>
@@ -156,6 +157,18 @@
     <div class="mact">
       <button class="btn" onclick="closeM()">Tühista</button>
       <button class="btn btn-primary" onclick="addR()">Lisa jõgi</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="emodal">
+  <div class="modal">
+    <div class="modal-title">📤 Ekspordi seaded</div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">Kopeeri allolev tekst (vajuta "Kopeeri") ja saada see Claude'ile chati. Tema teeb selle põhjal Sheetsi nimekirja.</p>
+    <textarea id="etext" readonly style="width:100%;height:280px;font-family:'DM Mono',monospace;font-size:11px;padding:10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);resize:vertical;"></textarea>
+    <div class="mact">
+      <button class="btn" onclick="closeE()">Sulge</button>
+      <button class="btn btn-primary" id="cpybtn" onclick="copyE()">📋 Kopeeri</button>
     </div>
   </div>
 </div>
@@ -315,8 +328,6 @@ async function loadCSV(){
     if(veIdx<0)veIdx=0;
     if(jaIdx<0)jaIdx=1;
     if(lvIdx<0)lvIdx=2;
-    console.log('EE veerud: veekogu='+veIdx+', jaam='+jaIdx+', tase='+lvIdx+', muutus='+dtIdx+', veetemp='+wtIdx+', õhutemp='+atIdx);
-    let eeCount=0;
     for(const row of (tEE.rows||[])){
       const c=row.c;
       if(!c||c.length<3)continue;
@@ -334,17 +345,6 @@ async function loadCSV(){
         airT:airT!=null?Math.round(airT*10)/10:null};
       liveData[jaam.toLowerCase()]=obj;
       allSt.push(obj);
-      eeCount++;
-    }
-    console.log('Eesti: laetud '+eeCount+' jaama');
-    // DEBUG: trüki esimesed 5 rida ja kõikide veergude väärtused (et näha mis tuleb)
-    if(tEE.rows&&tEE.rows.length>0){
-      console.log('=== EESTI DEBUG: esimesed 5 rida ===');
-      console.log('Veerud:', (tEE.cols||[]).map((c,i)=>i+': '+(c.label||c.id||'')).join(' | '));
-      for(let i=0;i<Math.min(5,tEE.rows.length);i++){
-        const c=tEE.rows[i].c;
-        console.log('Rida '+i+':', (c||[]).map((cc,j)=>j+'='+(cc&&cc.v!=null?cc.v:'∅')).join(' | '));
-      }
     }
   }catch(e){console.warn('Eesti laadimine ebaõnnestus:',e);}
 
@@ -717,6 +717,49 @@ function addR(){
       updated:new Date().toISOString(),err:null});
   }
   lsSave();closeM();render();
+}
+
+function exportSettings(){
+  // Tekstina ilus tabel mille saab Sheetsi/ehitajale saata
+  const lines=['Jogi\tJaam\tRiik\tMinKajak\tMinRaft\tMaxOhutu\tAbsMax\tIsiklikMin\tJarjekord\tAktiivne'];
+  rivers.forEach((r,i)=>{
+    lines.push([
+      r.jogi||'',
+      r.stJaam||r.jaam||'',
+      r.country||'EE',
+      r.kayakMin||'',
+      r.raftMin||'',
+      r.maxSafe||'',
+      r.absMax||'',
+      r.personalMin!=null?r.personalMin:'',
+      i+1,
+      'jah'
+    ].join('\t'));
+  });
+  const txt=lines.join('\n');
+  document.getElementById('etext').value=txt;
+  document.getElementById('emodal').classList.add('open');
+  document.getElementById('cpybtn').textContent='📋 Kopeeri';
+}
+function closeE(){document.getElementById('emodal').classList.remove('open');}
+function copyE(){
+  const ta=document.getElementById('etext');
+  ta.select();
+  ta.setSelectionRange(0,99999);
+  try{
+    navigator.clipboard.writeText(ta.value).then(()=>{
+      document.getElementById('cpybtn').textContent='✓ Kopeeritud!';
+      setTimeout(()=>{document.getElementById('cpybtn').textContent='📋 Kopeeri';},2000);
+    }).catch(()=>{
+      document.execCommand('copy');
+      document.getElementById('cpybtn').textContent='✓ Kopeeritud!';
+      setTimeout(()=>{document.getElementById('cpybtn').textContent='📋 Kopeeri';},2000);
+    });
+  }catch(e){
+    document.execCommand('copy');
+    document.getElementById('cpybtn').textContent='✓ Kopeeritud!';
+    setTimeout(()=>{document.getElementById('cpybtn').textContent='📋 Kopeeri';},2000);
+  }
 }
 
 async function init(){
