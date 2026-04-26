@@ -168,31 +168,83 @@ const GVIZ_EE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=o
 const GVIZ_LV_STAT='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=2032714583';
 const GVIZ_LV_DATA='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=410941272';
 
-// Läti jaamade -> jõgede kaardistus (jaama nime järgi, lowercase)
-// Allikas: pris.lvgmc.lv/hymer/<joe>_<jaam> URL-id ja LVĢMC dokumendid
+// Läti jaamade -> jõgede/veekogude kaardistus (jaama nime järgi, normaliseeritud)
+// Allikas: LVĢMC PRIS süsteem, LVĢMC dokumendid, geograafia
 const LV_RIVERS={
-  'sigulda':'Gauja','valmiera':'Gauja','carnikava':'Gauja','strenči':'Gauja','strenci':'Gauja',
-  'velēna':'Gauja','velena':'Gauja',
-  'mazsalaca':'Salaca','lagaste':'Salaca',
-  'jelgava':'Lielupe','mežotne':'Lielupe','mezotne':'Lielupe','kalnciems':'Lielupe',
-  'staļģene':'Lielupe','stalgene':'Lielupe',
-  'daugavpils':'Daugava','jēkabpils':'Daugava','jekabpils':'Daugava','pļaviņas':'Daugava','plavinas':'Daugava',
-  'rīga':'Daugava','riga':'Daugava','andrupene':'Daugava',
-  'kuldīga':'Venta','kuldiga':'Venta','ventspils':'Venta','abava':'Abava','renda':'Venta',
-  'tukums':'Slocene','jūrmala':'Lielupe','jurmala':'Lielupe',
-  'rēzekne':'Rēzekne','rezekne':'Rezekne',
-  'krāslava':'Daugava','kraslava':'Daugava',
-  'piedruja':'Daugava','vērēmi':'Rēzekne','veremi':'Rezekne',
-  'ainaži':'Salaca','ainazi':'Salaca','ramata':'Salaca',
-  'iecava':'Iecava','baldone':'Misa','misa':'Misa',
-  'ogre':'Ogre','suntaži':'Ogre','suntazi':'Ogre',
-  'vaive':'Amata','amata':'Amata','cēsis':'Gauja','cesis':'Gauja',
-  'dūkste':'Pededze','dukste':'Pededze','pededze':'Pededze',
-  'krāslavas':'Daugava','krasava':'Daugava','kraslavas':'Daugava',
-  'priekuli':'Brasla','brasla':'Brasla','straupe':'Brasla',
-  'lubāna':'Aiviekste','lubana':'Aiviekste','aiviekste':'Aiviekste','meirāni':'Aiviekste','meirani':'Aiviekste',
-  'jugla':'Jugla','baltezers':'Jugla','daugmale':'Daugava',
+  // Gauja jõgi
+  'sigulda':'Gauja','valmiera':'Gauja','carnikava':'Gauja','velēna':'Gauja',
+  'lejasciems':'Gauja','meltūri':'Gauja','melturi':'Gauja',
+  // Salaca jõgi
+  'mazsalaca':'Salaca','lagaste':'Salaca','salacgrīva':'Salaca',
+  // Lielupe jõgi (ja harud)
+  'jelgava':'Lielupe','mežotne':'Lielupe','kalnciems':'Lielupe','staļģene':'Lielupe',
+  'lielupes grīva':'Lielupe','bauska':'Mēmele','bramberģe':'Iecava',
+  // Daugava jõgi (ja harud)
+  'daugavpils':'Daugava','jēkabpils':'Daugava','pļaviņas':'Daugava','rīga':'Daugava',
+  'krāslava':'Daugava','piedruja':'Daugava','jersika':'Daugava','daugavgrīva':'Daugava',
+  'aiviekstes hes':'Aiviekste','lubāna':'Aiviekste','meirāni':'Aiviekste',
+  'zeļķi':'Daugava','vaikuļāni':'Daugava','sudrabkalni':'Daugava',
+  'pakuļu hes':'Daugava','pilskalni':'Daugava',
+  // Venta jõgi
+  'kuldīga':'Venta','ventspils':'Venta','renda':'Abava','vendzava':'Venta',
+  // Roja jõgi
+  'roja':'Roja','rojupe':'Roja',
+  // Gauja basseini väiksemad jõed
+  'cēsis':'Gauja','priekuļi':'Gauja','straupe':'Brasla',
+  // Ogre jõgi
+  'ogre':'Ogre','suntaži':'Ogre',
+  // Iecava ja Misa
+  'iecava':'Iecava','baldone':'Misa',
+  // Aiviekste
+  'aiviekste':'Aiviekste',
+  // Jugla
+  'jugla':'Jugla','baltezers':'Jugla',
+  // Latgale järved ja jõed
+  'rēzekne':'Rēzekne','vērēmi':'Rēzekne','ludza':'Ludza',
+  'pasiene':'Zilupe','zilupe':'Zilupe',
+  'kaunata':'Rēzekne','višķi':'Daugava','griškāni':'Rēzekne',
+  // Kuramaa
+  'liepāja':'Bārta','liepājas ezers':'Liepājas ezers','rucava':'Bārta',
+  'cīrava':'Tebra','vārdava':'Vārtaja',
+  // Põhja-Vidzeme
+  'alūksne':'Pededze','ape':'Vaidava','litene':'Pededze',
+  'lenderņa':'Pededze','dūkupji':'Pededze','oleri':'Seda',
+  'taurene':'Amata','zosēni':'Amata',
+  // Burtnieki järv ja Salaca
+  'burtnieki':'Burtnieku ezers',
+  // Riia laht ja rannikujaamad
+  'mērsrags':'Rīgas līcis','kolka':'Rīgas līcis','andrejosta':'Daugava',
+  'sloka':'Lielupe','jūrmala':'Lielupe','skulte':'Rīgas līcis',
+  'ainaži':'Rīgas līcis','spīdoles':'Rīgas līcis',
+  // Engure ja Usma järved
+  'usma':'Usmas ezers','engure':'Engures ezers',
+  // Muud järved
+  'ķīšezers':'Ķīšezers','vičaki':'Daugava','baloži':'Daugava',
+  // Plaviņu veehoidla
+  'lielveisi':'Daugava','meņģele':'Daugava','lielpeči':'Daugava',
+  // Brūnuļi (Salaca)
+  'brūnuļi':'Salaca','vilnīši':'Lielupe',
+  // Ülejäänud
+  'kūlenieki':'Daugava','alderi':'Daugava','tērande':'Tebra',
+  'pieviķi':'Daugava','sīļi':'Mēmele','stariņi':'Pededze',
+  'lozdova':'Daugava','alši':'Daugava','ūziņi':'Lielupe',
+  'zaķi':'Lielupe','dūkste':'Pededze','dukste':'Pededze',
 };
+
+// Normaliseerimine: lowercase + diakriitikute eemaldamine (et leida ka ilma täpitähtedeta)
+function normLV(s){
+  return s.toLowerCase()
+    .replace(/[āăą]/g,'a').replace(/[čć]/g,'c').replace(/[ēęě]/g,'e')
+    .replace(/[īįı]/g,'i').replace(/[ķ]/g,'k').replace(/[ļ]/g,'l')
+    .replace(/[ņ]/g,'n').replace(/[ōő]/g,'o').replace(/[š]/g,'s')
+    .replace(/[ū]/g,'u').replace(/[žź]/g,'z').replace(/[õö]/g,'o')
+    .replace(/[ä]/g,'a').replace(/[ü]/g,'u');
+}
+// Loo ka normaliseeritud variandid
+const LV_RIVERS_NORM={};
+for(const k in LV_RIVERS){
+  LV_RIVERS_NORM[normLV(k)]=LV_RIVERS[k];
+}
 
 let rivers=[], liveData={}, allSt=[], filtSt=[], selSt=null, editId=null, atab='l', busy=false, lupd=null;
 
@@ -402,10 +454,13 @@ async function loadCSV(){
 
       const name=lvStations[sid]||sid;
       const lvl=Math.round(latest.val);
-      // Tuvasta jõe nimi LV_RIVERS kaardilt (võti=jaama nime esimene sõna lowercase)
-      const nameKey=name.toLowerCase().split(/[\s,]/)[0].replace(/[.,;]/g,'');
-      const river=LV_RIVERS[nameKey]||LV_RIVERS[name.toLowerCase()];
-      // Kuvatav veekogu nimi: kui jõe leitud, "Jõgi (Jaam)", muidu lihtsalt jaama nimi
+      // Tuvasta jõe nimi LV_RIVERS kaardilt - proovime nii originaal kui normaliseeritud nimega
+      const normName=normLV(name);
+      const river=LV_RIVERS_NORM[normName]
+        ||LV_RIVERS_NORM[normName.split(/[\s,]/)[0]]
+        ||LV_RIVERS[name.toLowerCase()]
+        ||LV_RIVERS[name.toLowerCase().split(/[\s,]/)[0]];
+      // Kuvatav veekogu nimi: kui jõgi leitud, "Jõgi / Jaam", muidu lihtsalt jaama nimi
       const veekoguDisplay=river?(river+' / '+name):name;
       const fakeJaam=name+' (LV)';
       const obj={level:lvl, jaam:fakeJaam, veekogu:veekoguDisplay, country:'LV',
