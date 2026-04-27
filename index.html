@@ -635,9 +635,9 @@ function renderCard(r){
       <span class="foot-src"><span class="fdot ${r.isLive?'live':'man'}"></span>${r.isLive?'KA · ':'Käsitsi · '}${fmt(r.updated)}</span>
       <div class="foot-btns">
         ${!r.isLive?`<input class="man-inp" type="number" id="mi-${r.id}" value="${r.level||0}" min="0"/>
-          <button class="ibtn" onclick="setMan(${r.id})">OK</button>`:''}
-        <button class="ibtn" onclick="tog(${r.id})">${ed?'✕':'⚙'}</button>
-        <button class="ibtn" onclick="del(${r.id})">🗑</button>
+          <button class="ibtn" onclick="setMan('${r.id}')">OK</button>`:''}
+        <button class="ibtn" onclick="tog('${r.id}')">${ed?'✕':'⚙'}</button>
+        <button class="ibtn" onclick="del('${r.id}')">🗑</button>
       </div>
     </div>
     ${ed?`<div class="sp">
@@ -646,7 +646,7 @@ function renderCard(r){
       <div class="sp-row"><label>Min rafting (cm)</label><input type="number" id="er-${r.id}" value="${r.raftMin}"/></div>
       <div class="sp-row"><label>Max ohutu (cm)</label><input type="number" id="em-${r.id}" value="${r.maxSafe}"/></div>
       <div class="sp-row"><label>Absoluutne max</label><input type="number" id="ea-${r.id}" value="${r.absMax}"/></div>
-      <div style="margin-top:8px;"><button class="btn" style="font-size:12px;padding:5px 12px;" onclick="saveEd(${r.id})">Salvesta</button></div>
+      <div style="margin-top:8px;"><button class="btn" style="font-size:12px;padding:5px 12px;" onclick="saveEd('${r.id}')">Salvesta</button></div>
     </div>`:''}
   </div>`;
 }
@@ -677,7 +677,7 @@ function saveEd(id){
   const r=rivers.find(rr=>rr.id===id);
   if(r&&r.isDefault){
     const {customized}=loadUserState();
-    const key=r.country+'|'+r.stJaam.replace(' (LV)','');
+    const key=r.country+'__'+r.stJaam.replace(' (LV)','');
     customized[key]={kayakMin:km,raftMin:rm,maxSafe:ms,absMax:am,personalMin:pmFinal};
     saveCustomized(customized);
   }
@@ -691,7 +691,7 @@ function del(id){
   if(r.isDefault){
     // Vaikimisi jõe kustutamine — lisa kustutuste nimekirja
     const {deleted}=loadUserState();
-    const key=r.country+'|'+r.stJaam.replace(' (LV)','');
+    const key=r.country+'__'+r.stJaam.replace(' (LV)','');
     if(!deleted.includes(key))deleted.push(key);
     saveDeleted(deleted);
   }
@@ -765,7 +765,7 @@ function addR(){
   if(atab==='l'){
     if(!selSt){err.textContent='Palun vali jaam nimekirjast (vajuta sellele).';err.style.display='block';return;}
     const ppmVal=parseInt(document.getElementById('ppm').value);
-    rivers.push({id:Date.now(),jogi:selSt.veekogu,jaam:selSt.jaam,stJaam:selSt.jaam,isLive:true,
+    rivers.push({id:String(Date.now()),jogi:selSt.veekogu,jaam:selSt.jaam,stJaam:selSt.jaam,isLive:true,
       country:selSt.country||'EE',
       level:selSt.level,kayakMin:parseInt(document.getElementById('pkm').value)||40,
       raftMin:parseInt(document.getElementById('prm').value)||60,
@@ -780,7 +780,7 @@ function addR(){
     const name=document.getElementById('mn').value.trim();
     if(!name){err.textContent='Palun sisesta nimi.';err.style.display='block';return;}
     const mpmVal=parseInt(document.getElementById('mpm').value);
-    rivers.push({id:Date.now(),jogi:name,jaam:document.getElementById('ml').value.trim()||'—',
+    rivers.push({id:String(Date.now()),jogi:name,jaam:document.getElementById('ml').value.trim()||'—',
       stJaam:null,isLive:false,level:parseInt(document.getElementById('mv').value)||50,
       kayakMin:parseInt(document.getElementById('mkm').value)||40,
       raftMin:parseInt(document.getElementById('mrm').value)||60,
@@ -897,7 +897,7 @@ function buildRivers(){
   const newRivers=[];
   // 1) Lisa vaikimisi jõed (välja arvatud kasutaja kustutatud)
   for(const d of defaults){
-    const key=d.country+'|'+d.jaam;
+    const key=d.country+'__'+d.jaam;
     if(deleted.includes(key))continue;
     // Kasuta kasutaja muudatusi kui need on
     const custom=customized[key]||{};
@@ -937,7 +937,7 @@ function buildRivers(){
       if(m){r.level=m.level;r.delta24=m.delta24;r.waterT=m.waterT;r.airT=m.airT;r.isCache=!!m.isCache;r.country=m.country||r.country;r.updated=lupd;r.err=null;}
       else r.err='Jaama ei leitud';
     }
-    newRivers.push({...r,err:r.err||null});
+    newRivers.push({...r,id:String(r.id),err:r.err||null});
   }
   rivers=newRivers;
 }
