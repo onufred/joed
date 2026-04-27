@@ -65,6 +65,7 @@
   .extra b { color:var(--text); font-weight:500; }
   .extra.up b { color:var(--green); }
   .extra.down b { color:var(--orange); }
+  .cache-tag { font-size:10px; padding:3px 7px; border-radius:5px; background:var(--orange-bg); color:var(--orange); font-family:'DM Mono',monospace; display:inline-flex; align-items:center; gap:3px; margin-top:6px; border:1px solid #f0b97a; }
   .card-foot { display:flex; align-items:center; justify-content:space-between; padding-top:10px; border-top:1px solid var(--surface2); gap:6px; flex-wrap:wrap; }
   .foot-src { font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; display:flex; align-items:center; gap:4px; }
   .fdot { width:5px; height:5px; border-radius:50%; }
@@ -182,6 +183,8 @@ const GVIZ_EE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=o
 const GVIZ_LV_STAT='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=2032714583';
 const GVIZ_LV_DATA='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=410941272';
 const GVIZ_DEFAULTS='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=2023148913';
+const GVIZ_CACHE_EE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=2068334598';
+const GVIZ_CACHE_LV='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=296812902';
 
 // Läti jaamade -> jõgede/veekogude kaardistus (jaama nime järgi, normaliseeritud)
 // Allikas: LVĢMC PRIS süsteem, LVĢMC dokumendid, geograafia
@@ -318,13 +321,12 @@ async function loadCSV(){
     return isNaN(v)?null:v;
   };
 
-  // 1) Eesti andmed - leiame veerud tegeliku label'i järgi (mitte indeksi)
-  try{
-    const tEE=await fetchGvizJSON(GVIZ_EE);
+  // Üldine Eesti veergude tuvastus (kasutame nii Sheet1 kui Cache_EE jaoks)
+  const findEEColumns=(t)=>{
     let veIdx=-1, jaIdx=-1, lvIdx=-1, dtIdx=-1, wtIdx=-1, atIdx=-1;
-    if(tEE.cols){
-      for(let i=0;i<tEE.cols.length;i++){
-        const lbl=((tEE.cols[i].label||'')+' '+(tEE.cols[i].id||'')).toLowerCase();
+    if(t.cols){
+      for(let i=0;i<t.cols.length;i++){
+        const lbl=((t.cols[i].label||'')+' '+(t.cols[i].id||'')).toLowerCase();
         if(veIdx<0&&(lbl.includes('veekogu')||lbl.includes('jõgi')))veIdx=i;
         else if(jaIdx<0&&lbl.includes('jaam'))jaIdx=i;
         else if(lvIdx<0&&lbl.includes('veetase')&&!lbl.includes('muut'))lvIdx=i;
@@ -333,29 +335,58 @@ async function loadCSV(){
         else if(atIdx<0&&(lbl.includes('õhutemp')||lbl.includes('ohutemp')))atIdx=i;
       }
     }
-    // Kui label'eid ei tuvastatud, kasuta vaikeindekseid
     if(veIdx<0)veIdx=0;
     if(jaIdx<0)jaIdx=1;
     if(lvIdx<0)lvIdx=2;
+    return {veIdx, jaIdx, lvIdx, dtIdx, wtIdx, atIdx};
+  };
+
+  const parseEERow=(c, idx, isCache)=>{
+    if(!c||c.length<3)return null;
+    const veekogu=(c[idx.veIdx]&&c[idx.veIdx].v!=null)?String(c[idx.veIdx].v).trim():'';
+    const jaam=(c[idx.jaIdx]&&c[idx.jaIdx].v!=null)?String(c[idx.jaIdx].v).trim():'';
+    if(!veekogu&&!jaam)return null;
+    const lvl=num(c[idx.lvIdx]?c[idx.lvIdx].v:null);
+    if(lvl===null)return null;
+    const delta24=idx.dtIdx>=0&&c[idx.dtIdx]?num(c[idx.dtIdx].v):null;
+    const waterT=idx.wtIdx>=0&&c[idx.wtIdx]?num(c[idx.wtIdx].v):null;
+    const airT=idx.atIdx>=0&&c[idx.atIdx]?num(c[idx.atIdx].v):null;
+    return {level:Math.round(lvl),jaam,veekogu,country:'EE',
+      delta24:delta24!=null?Math.round(delta24*10)/10:null,
+      waterT:waterT!=null?Math.round(waterT*10)/10:null,
+      airT:airT!=null?Math.round(airT*10)/10:null,
+      isCache:!!isCache};
+  };
+
+  // 1) Eesti andmed - laeme paralleelselt Sheet1 (live) ja Cache_EE (varuks)
+  let liveEE={}, cacheEE={};
+  try{
+    const tEE=await fetchGvizJSON(GVIZ_EE);
+    const idx=findEEColumns(tEE);
     for(const row of (tEE.rows||[])){
-      const c=row.c;
-      if(!c||c.length<3)continue;
-      const veekogu=(c[veIdx]&&c[veIdx].v!=null)?String(c[veIdx].v).trim():'';
-      const jaam=(c[jaIdx]&&c[jaIdx].v!=null)?String(c[jaIdx].v).trim():'';
-      if(!veekogu&&!jaam)continue;
-      const lvl=num(c[lvIdx]?c[lvIdx].v:null);
-      if(lvl===null)continue;
-      const delta24=dtIdx>=0&&c[dtIdx]?num(c[dtIdx].v):null;
-      const waterT=wtIdx>=0&&c[wtIdx]?num(c[wtIdx].v):null;
-      const airT=atIdx>=0&&c[atIdx]?num(c[atIdx].v):null;
-      const obj={level:Math.round(lvl),jaam,veekogu,country:'EE',
-        delta24:delta24!=null?Math.round(delta24*10)/10:null,
-        waterT:waterT!=null?Math.round(waterT*10)/10:null,
-        airT:airT!=null?Math.round(airT*10)/10:null};
-      liveData[jaam.toLowerCase()]=obj;
+      const obj=parseEERow(row.c, idx, false);
+      if(obj)liveEE[obj.jaam.toLowerCase()]=obj;
+    }
+  }catch(e){console.warn('Eesti live laadimine ebaõnnestus:',e);}
+
+  try{
+    const tEE2=await fetchGvizJSON(GVIZ_CACHE_EE);
+    const idx=findEEColumns(tEE2);
+    for(const row of (tEE2.rows||[])){
+      const obj=parseEERow(row.c, idx, true);
+      if(obj)cacheEE[obj.jaam.toLowerCase()]=obj;
+    }
+  }catch(e){console.warn('Eesti cache laadimine ebaõnnestus:',e);}
+
+  // Kombineerime: live on prioriteetne, cache täidab puuduvad jaamad
+  const allEEKeys=new Set([...Object.keys(liveEE), ...Object.keys(cacheEE)]);
+  for(const k of allEEKeys){
+    const obj=liveEE[k]||cacheEE[k];
+    if(obj){
+      liveData[k]=obj;
       allSt.push(obj);
     }
-  }catch(e){console.warn('Eesti laadimine ebaõnnestus:',e);}
+  }
 
   // 2) Läti jaamade nimekiri (Station_id -> Name)
   const lvStations={};
@@ -381,8 +412,22 @@ async function loadCSV(){
   }catch(e){console.warn('Läti jaamade laadimine ebaõnnestus:',e);}
 
   // 3) Läti andmed: LIMEN (veetase) + WTEMD (veetemperatuur), 24h muudatus arvutatakse ise
-  try{
-    const tLV=await fetchGvizJSON(GVIZ_LV_DATA);
+  // Aja parsimine - LV API tagastab "2026.04.26 06:00:00" formaadis
+  const parseDt=(raw)=>{
+    if(!raw)return 0;
+    let s=typeof raw==='string'?raw:String(raw);
+    s=s.trim();
+    const m=s.match(/^(\d{4})[.\-](\d{2})[.\-](\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+    if(m){
+      const t=Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]||'00'}Z`);
+      return isNaN(t)?0:t;
+    }
+    const t=Date.parse(s);
+    return isNaN(t)?0:t;
+  };
+
+  // Funktsioon parsib Läti tabeli ja tagastab jaamapõhise andmestruktuuri
+  const parseLVTable=(tLV)=>{
     let sidIdx=-1, abbrIdx=-1, dtIdx=-1, valIdx=-1;
     if(tLV.cols){
       for(let i=0;i<tLV.cols.length;i++){
@@ -397,26 +442,7 @@ async function loadCSV(){
     if(abbrIdx<0)abbrIdx=1;
     if(dtIdx<0)dtIdx=2;
     if(valIdx<0)valIdx=3;
-
-    // Aja parsimine - LV API tagastab "2026.04.26 06:00:00" formaadis
-    const parseDt=(raw)=>{
-      if(!raw)return 0;
-      let s=typeof raw==='string'?raw:String(raw);
-      s=s.trim();
-      // Asenda punktid kriipsudega ja tühik T-ga (ISO 8601)
-      const m=s.match(/^(\d{4})[.\-](\d{2})[.\-](\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
-      if(m){
-        const t=Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]||'00'}Z`);
-        return isNaN(t)?0:t;
-      }
-      const t=Date.parse(s);
-      return isNaN(t)?0:t;
-    };
-
-    // Kogume kõik LIMEN ja WTEMD näidud jaamade kaupa
-    const limenByStation={};   // sid -> [{val,ts},...]
-    const wtempByStation={};
-
+    const limenByStation={}, wtempByStation={};
     for(const row of (tLV.rows||[])){
       const c=row.c;
       if(!c||c.length<4)continue;
@@ -435,10 +461,37 @@ async function loadCSV(){
         wtempByStation[sid].push({val,ts});
       }
     }
+    return {limenByStation, wtempByStation};
+  };
 
-    // Töötame iga LIMEN-jaama läbi
-    for(const sid in limenByStation){
-      const samples=limenByStation[sid].sort((a,b)=>b.ts-a.ts);
+  // Lae nii live (Latvia_Andmed) kui cache (Cache_LV) paralleelselt
+  let liveLV={limenByStation:{}, wtempByStation:{}};
+  let cacheLV={limenByStation:{}, wtempByStation:{}};
+  try{
+    const tLV=await fetchGvizJSON(GVIZ_LV_DATA);
+    liveLV=parseLVTable(tLV);
+  }catch(e){console.warn('Läti live laadimine ebaõnnestus:',e);}
+  try{
+    const tLV2=await fetchGvizJSON(GVIZ_CACHE_LV);
+    cacheLV=parseLVTable(tLV2);
+  }catch(e){console.warn('Läti cache laadimine ebaõnnestus:',e);}
+
+  // Kombineerime: live prioriteet, cache täidab puuduvad jaamad
+  // (mõlemast allikast jaamad pannakse kokku, näit per-station vali live kui olemas)
+  const allLVStations=new Set([
+    ...Object.keys(liveLV.limenByStation),
+    ...Object.keys(cacheLV.limenByStation)
+  ]);
+
+  try{
+    for(const sid of allLVStations){
+      // Kasuta live'i kui see jaam seal olemas, muidu cache
+      const limenSamples=liveLV.limenByStation[sid]||cacheLV.limenByStation[sid]||[];
+      const wtempSamples=liveLV.wtempByStation[sid]||cacheLV.wtempByStation[sid]||[];
+      const isCache=!liveLV.limenByStation[sid];
+
+      if(limenSamples.length===0)continue;
+      const samples=limenSamples.sort((a,b)=>b.ts-a.ts);
       const latest=samples[0];
       if(!latest)continue;
 
@@ -455,27 +508,25 @@ async function loadCSV(){
 
       // Uusim WTEMD samalt jaamalt
       let waterT=null;
-      const wt=wtempByStation[sid];
-      if(wt&&wt.length>0){
-        wt.sort((a,b)=>b.ts-a.ts);
-        waterT=wt[0].val;
+      if(wtempSamples.length>0){
+        const wts=[...wtempSamples].sort((a,b)=>b.ts-a.ts);
+        waterT=wts[0].val;
       }
 
       const name=lvStations[sid]||sid;
       const lvl=Math.round(latest.val);
-      // Tuvasta jõe nimi LV_RIVERS kaardilt - proovime nii originaal kui normaliseeritud nimega
       const normName=normLV(name);
       const river=LV_RIVERS_NORM[normName]
         ||LV_RIVERS_NORM[normName.split(/[\s,]/)[0]]
         ||LV_RIVERS[name.toLowerCase()]
         ||LV_RIVERS[name.toLowerCase().split(/[\s,]/)[0]];
-      // Kuvatav veekogu nimi: kui jõgi leitud, "Jõgi / Jaam", muidu lihtsalt jaama nimi
       const veekoguDisplay=river?(river+' / '+name):name;
       const fakeJaam=name+' (LV)';
       const obj={level:lvl, jaam:fakeJaam, veekogu:veekoguDisplay, country:'LV',
         delta24:delta24!=null?Math.round(delta24*10)/10:null,
         waterT:waterT!=null?Math.round(waterT*10)/10:null,
-        airT:null};
+        airT:null,
+        isCache:isCache};
       liveData[fakeJaam.toLowerCase()]=obj;
       allSt.push(obj);
     }
@@ -506,7 +557,9 @@ async function refreshAll(){
     buildRivers();
     lsSave();
     const cnt=allSt.length;
-    document.getElementById('stxt').textContent=`${cnt} jaama laetud · ${fmt(lupd)}`;
+    const cacheCnt=allSt.filter(s=>s.isCache).length;
+    const txt=cacheCnt>0?`${cnt} jaama laetud (${cacheCnt} varuandmetest) · ${fmt(lupd)}`:`${cnt} jaama laetud · ${fmt(lupd)}`;
+    document.getElementById('stxt').textContent=txt;
     document.getElementById('sdot').className='sdot';
     document.getElementById('lupd').textContent=fmt(lupd);
     filtSt=[...allSt];
@@ -577,6 +630,7 @@ function renderCard(r){
       ${r.airT!=null?`<span class="extra"><span class="ex-lbl">🌡 õhk</span><b>${r.airT}°C</b></span>`:''}
     </div>`:''}
     <div class="pills" style="margin-top:10px;">${spill(r,'k')}${spill(r,'r')}</div>
+    ${r.isCache?`<div class="cache-tag">⏱ Vanad andmed (varuandmed)</div>`:''}
     <div class="card-foot">
       <span class="foot-src"><span class="fdot ${r.isLive?'live':'man'}"></span>${r.isLive?'KA · ':'Käsitsi · '}${fmt(r.updated)}</span>
       <div class="foot-btns">
@@ -865,6 +919,7 @@ function buildRivers(){
       delta24:m?m.delta24:null,
       waterT:m?m.waterT:null,
       airT:m?m.airT:null,
+      isCache:m?!!m.isCache:false,
       updated:lupd,
       err:m?null:'Jaama ei leitud'
     });
@@ -879,7 +934,7 @@ function buildRivers(){
     // Värskenda live andmed
     if(r.isLive&&r.stJaam){
       const m=findSt(r.stJaam);
-      if(m){r.level=m.level;r.delta24=m.delta24;r.waterT=m.waterT;r.airT=m.airT;r.country=m.country||r.country;r.updated=lupd;r.err=null;}
+      if(m){r.level=m.level;r.delta24=m.delta24;r.waterT=m.waterT;r.airT=m.airT;r.isCache=!!m.isCache;r.country=m.country||r.country;r.updated=lupd;r.err=null;}
       else r.err='Jaama ei leitud';
     }
     newRivers.push({...r,err:r.err||null});
@@ -905,7 +960,9 @@ async function init(){
   try{
     await Promise.all([loadDefaults(), loadCSV()]);
     document.getElementById('sdot').className='sdot';
-    document.getElementById('stxt').textContent=`${allSt.length} jaama laetud · ${fmt(lupd)}`;
+    const cacheCnt=allSt.filter(s=>s.isCache).length;
+    const txt=cacheCnt>0?`${allSt.length} jaama laetud (${cacheCnt} varuandmetest) · ${fmt(lupd)}`:`${allSt.length} jaama laetud · ${fmt(lupd)}`;
+    document.getElementById('stxt').textContent=txt;
     document.getElementById('lupd').textContent=fmt(lupd);
     filtSt=[...allSt];
   }catch(e){
