@@ -109,6 +109,7 @@
   </div>
   <div class="header-right">
     <button class="btn" id="rbtn" onclick="refreshAll()">↻ Uuenda</button>
+    <button class="btn" onclick="resetDefaults()" title="Lähtesta vaikimisi nimekiri">🔄 Lähtesta</button>
     <button class="btn" onclick="exportSettings()">📤 Ekspordi</button>
     <button class="btn btn-primary" onclick="openM()">+ Lisa jõgi</button>
   </div>
@@ -180,6 +181,7 @@ const SHEET_ID='1ih6_OZSzPpxQvK4-kdfyMdZDO8j0C_CTPtMTjH3KFkY';
 const GVIZ_EE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=0';
 const GVIZ_LV_STAT='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=2032714583';
 const GVIZ_LV_DATA='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=410941272';
+const GVIZ_DEFAULTS='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=2023148913';
 
 // Läti jaamade -> jõgede/veekogude kaardistus (jaama nime järgi, normaliseeritud)
 // Allikas: LVĢMC PRIS süsteem, LVĢMC dokumendid, geograafia
@@ -260,9 +262,16 @@ for(const k in LV_RIVERS){
 }
 
 let rivers=[], liveData={}, allSt=[], filtSt=[], selSt=null, editId=null, atab='l', busy=false, lupd=null;
+let defaults=[]; // Sinu Sheetsist tulevad vaikimisi jõed
+const SK_DELETED='rv9_deleted'; // Kasutaja eemaldatud vaikimisi jõed (jaam-nimed)
+const SK_CUSTOMIZED='rv9_customized'; // Kasutaja muudetud jõed (jaam -> {kayakMin, raftMin, ...})
 
 function lsLoad(){try{const r=localStorage.getItem(SK);if(r)return JSON.parse(r);}catch(e){}return null;}
-function lsSave(){try{localStorage.setItem(SK,JSON.stringify(rivers));}catch(e){}}
+function lsSave(){try{
+  // Salvesta ainult kasutaja enda lisatud jõed (mitte vaikimisi - need tulevad Sheetsist)
+  const userOnly=rivers.filter(r=>!r.isDefault);
+  localStorage.setItem(SK,JSON.stringify(userOnly));
+}catch(e){}}
 
 // Üldine GVIZ JSONP-stiilis laadija — kuna tegelikult fetch on ka lubatud sama-päritolu
 // kontekstis (https), proovime kõigepealt fetch'i ja kui ebaõnnestub, kasutame script tag'i
@@ -493,21 +502,8 @@ async function refreshAll(){
   document.getElementById('stxt').textContent='Laen andmeid...';
   render();
   try{
-    await loadCSV();
-    for(const r of rivers){
-      if(r.isLive&&r.stJaam){
-        const m=findSt(r.stJaam);
-        if(m){
-          r.level=m.level;
-          r.delta24=m.delta24;
-          r.waterT=m.waterT;
-          r.airT=m.airT;
-          r.country=m.country||r.country;
-          r.updated=lupd;r.err=null;
-        }
-        else r.err='Jaama ei leitud';
-      }
-    }
+    await Promise.all([loadDefaults(), loadCSV()]);
+    buildRivers();
     lsSave();
     const cnt=allSt.length;
     document.getElementById('stxt').textContent=`${cnt} jaama laetud · ${fmt(lupd)}`;
@@ -604,7 +600,11 @@ function renderCard(r){
 function render(){
   const g=document.getElementById('grid');if(!g)return;
   if(rivers.length===0){
-    g.innerHTML=`<div class="empty">${allSt.length>0?'Lisa jõgi nupuga "+ Lisa jõgi"':busy?'Laeb...':'Andmed laetakse...'}</div>`;
+    if(defaults.length>0){
+      g.innerHTML=`<div class="empty">Kõik vaikimisi jõed on kustutatud.<br><br><button class="btn" onclick="resetDefaults()" style="margin-top:8px;">🔄 Lähtesta vaikimisi nimekiri</button> või vajuta "+ Lisa jõgi"</div>`;
+    } else {
+      g.innerHTML=`<div class="empty">${allSt.length>0?'Lisa jõgi nupuga "+ Lisa jõgi"':busy?'Laeb...':'Andmed laetakse...'}</div>`;
+    }
     return;
   }
   g.innerHTML=rivers.map(renderCard).join('');
@@ -616,14 +616,34 @@ function saveEd(id){
   const g=k=>parseInt(document.getElementById(k+id).value,10);
   const[km,rm,ms,am]=[g('ek-'),g('er-'),g('em-'),g('ea-')];
   if([km,rm,ms,am].some(isNaN))return;
-  // Isiklik miinimum on valikuline
   const pmRaw=document.getElementById('ep-'+id).value.trim();
   const pm=pmRaw===''?null:parseInt(pmRaw,10);
   const pmFinal=(pm===null||isNaN(pm))?null:pm;
-  rivers=rivers.map(r=>r.id===id?{...r,kayakMin:km,raftMin:rm,maxSafe:ms,absMax:am,personalMin:pmFinal}:r);
+  // Kui see on vaikimisi jõgi, salvesta muudatused customized'i
+  const r=rivers.find(rr=>rr.id===id);
+  if(r&&r.isDefault){
+    const {customized}=loadUserState();
+    const key=r.country+'|'+r.stJaam.replace(' (LV)','');
+    customized[key]={kayakMin:km,raftMin:rm,maxSafe:ms,absMax:am,personalMin:pmFinal};
+    saveCustomized(customized);
+  }
+  rivers=rivers.map(rr=>rr.id===id?{...rr,kayakMin:km,raftMin:rm,maxSafe:ms,absMax:am,personalMin:pmFinal}:rr);
   editId=null;lsSave();render();
 }
-function del(id){if(!confirm('Kustuta?'))return;rivers=rivers.filter(r=>r.id!==id);lsSave();render();}
+function del(id){
+  const r=rivers.find(rr=>rr.id===id);
+  if(!r)return;
+  if(!confirm('Kustuta?'))return;
+  if(r.isDefault){
+    // Vaikimisi jõe kustutamine — lisa kustutuste nimekirja
+    const {deleted}=loadUserState();
+    const key=r.country+'|'+r.stJaam.replace(' (LV)','');
+    if(!deleted.includes(key))deleted.push(key);
+    saveDeleted(deleted);
+  }
+  rivers=rivers.filter(rr=>rr.id!==id);
+  lsSave();render();
+}
 
 function filterSt(){
   let q=(document.getElementById('ssrch').value||'').toLowerCase().trim();
@@ -762,28 +782,139 @@ function copyE(){
   }
 }
 
-async function init(){
-  const saved=lsLoad();
-  if(saved&&saved.length>0)rivers=saved.map(r=>({...r,err:null}));
-  render();
-  await refreshAll();
-  if(!saved||saved.length===0){
-    const defs=[
-      {jaam:'Kirumpää',jogi:'Võhandu',km:40,rm:70,ms:180,am:250},
-      {jaam:'Kääpa',jogi:'Kääpa',km:30,rm:50,ms:150,am:200},
-      {jaam:'Torma',jogi:'Avijõgi',km:35,rm:60,ms:160,am:220},
-      {jaam:'Rannapungerja',jogi:'Rannapungerja',km:30,rm:55,ms:150,am:200},
-      {jaam:'Riisa',jogi:'Pärnu',km:50,rm:90,ms:180,am:250},
-    ];
-    for(const d of defs){
-      const m=findSt(d.jaam);
-      if(m)rivers.push({id:Date.now()+Math.random(),jogi:d.jogi||m.veekogu,jaam:m.jaam,stJaam:m.jaam,
-        isLive:true,level:m.level,kayakMin:d.km,raftMin:d.rm,maxSafe:d.ms,absMax:d.am,
-        country:m.country||'EE',delta24:m.delta24,waterT:m.waterT,airT:m.airT,
-        updated:lupd,err:null});
+// Lae sinu vaikimisi jõed Sheetsist (Joed_loend vaheleht)
+async function loadDefaults(){
+  defaults=[];
+  try{
+    const t=await fetchGvizJSON(GVIZ_DEFAULTS);
+    if(!t.cols||!t.rows)return;
+    // Tuvasta veerud labeli järgi
+    let jogiIdx=-1, jaamIdx=-1, riikIdx=-1, kmIdx=-1, rmIdx=-1, msIdx=-1, amIdx=-1, pmIdx=-1, jrIdx=-1, akIdx=-1;
+    for(let i=0;i<t.cols.length;i++){
+      const lbl=((t.cols[i].label||'')+' '+(t.cols[i].id||'')).toLowerCase();
+      if(lbl.includes('jogi')||lbl.includes('jõgi'))jogiIdx=i;
+      else if(lbl.includes('jaam'))jaamIdx=i;
+      else if(lbl.includes('riik'))riikIdx=i;
+      else if(lbl.includes('minkajak'))kmIdx=i;
+      else if(lbl.includes('minraft'))rmIdx=i;
+      else if(lbl.includes('maxohutu'))msIdx=i;
+      else if(lbl.includes('absmax'))amIdx=i;
+      else if(lbl.includes('isiklik'))pmIdx=i;
+      else if(lbl.includes('jarjekord')||lbl.includes('järjekord'))jrIdx=i;
+      else if(lbl.includes('aktiivne'))akIdx=i;
     }
-    lsSave();render();
+    const num=(c)=>{if(!c||c.v==null)return null;const v=typeof c.v==='number'?c.v:parseFloat(String(c.v).replace(',','.'));return isNaN(v)?null:v;};
+    const str=(c)=>(c&&c.v!=null)?String(c.v).trim():'';
+    for(const row of t.rows){
+      const c=row.c;if(!c)continue;
+      const aktiivne=akIdx>=0?str(c[akIdx]).toLowerCase():'jah';
+      if(aktiivne==='ei'||aktiivne==='no'||aktiivne==='0')continue;
+      const jogi=str(c[jogiIdx>=0?jogiIdx:0]);
+      const jaam=str(c[jaamIdx>=0?jaamIdx:1]);
+      if(!jogi&&!jaam)continue;
+      defaults.push({
+        jogi, jaam,
+        country:str(c[riikIdx>=0?riikIdx:2]).toUpperCase()||'EE',
+        kayakMin:num(c[kmIdx])||40,
+        raftMin:num(c[rmIdx])||60,
+        maxSafe:num(c[msIdx])||150,
+        absMax:num(c[amIdx])||200,
+        personalMin:num(c[pmIdx]),
+        order:num(c[jrIdx])||999
+      });
+    }
+    defaults.sort((a,b)=>a.order-b.order);
+  }catch(e){console.warn('Vaikimisi nimekirja laadimine ebaõnnestus:',e);}
+}
+
+// Loe localStoragest kasutaja kustutused ja muudatused
+function loadUserState(){
+  let deleted=[], customized={};
+  try{const r=localStorage.getItem(SK_DELETED);if(r)deleted=JSON.parse(r);}catch(e){}
+  try{const r=localStorage.getItem(SK_CUSTOMIZED);if(r)customized=JSON.parse(r);}catch(e){}
+  return {deleted, customized};
+}
+function saveDeleted(arr){try{localStorage.setItem(SK_DELETED,JSON.stringify(arr));}catch(e){}}
+function saveCustomized(obj){try{localStorage.setItem(SK_CUSTOMIZED,JSON.stringify(obj));}catch(e){}}
+
+// Ehita rivers nimekiri: vaikimisi (välja arvatud kustutatud) + kasutaja lisatud (ei ole defaults nimekirjas)
+function buildRivers(){
+  const {deleted, customized}=loadUserState();
+  const newRivers=[];
+  // 1) Lisa vaikimisi jõed (välja arvatud kasutaja kustutatud)
+  for(const d of defaults){
+    const key=d.country+'|'+d.jaam;
+    if(deleted.includes(key))continue;
+    // Kasuta kasutaja muudatusi kui need on
+    const custom=customized[key]||{};
+    const m=d.country==='LV'?findSt(d.jaam+' (LV)')||findSt(d.jaam):findSt(d.jaam);
+    newRivers.push({
+      id:'def_'+key,
+      isDefault:true,
+      jogi:d.jogi,
+      jaam:m?m.jaam:(d.country==='LV'?d.jaam+' (LV)':d.jaam),
+      stJaam:m?m.jaam:(d.country==='LV'?d.jaam+' (LV)':d.jaam),
+      isLive:true,
+      country:d.country,
+      level:m?m.level:null,
+      kayakMin:custom.kayakMin!=null?custom.kayakMin:d.kayakMin,
+      raftMin:custom.raftMin!=null?custom.raftMin:d.raftMin,
+      maxSafe:custom.maxSafe!=null?custom.maxSafe:d.maxSafe,
+      absMax:custom.absMax!=null?custom.absMax:d.absMax,
+      personalMin:custom.personalMin!==undefined?custom.personalMin:d.personalMin,
+      delta24:m?m.delta24:null,
+      waterT:m?m.waterT:null,
+      airT:m?m.airT:null,
+      updated:lupd,
+      err:m?null:'Jaama ei leitud'
+    });
   }
+  // 2) Lisa kasutaja enda lisatud jõed (need on lsLoad-st)
+  const userRivers=lsLoad()||[];
+  // Filtreeri välja need, mis on tegelikult sinu defaults nimekirjast (vana versiooni jäänukid)
+  const defaultJaams=new Set(defaults.map(d=>(d.country==='LV'?d.jaam+' (LV)':d.jaam)));
+  for(const r of userRivers){
+    if(r.isDefault)continue;
+    if(r.isLive&&defaultJaams.has(r.stJaam))continue;
+    // Värskenda live andmed
+    if(r.isLive&&r.stJaam){
+      const m=findSt(r.stJaam);
+      if(m){r.level=m.level;r.delta24=m.delta24;r.waterT=m.waterT;r.airT=m.airT;r.country=m.country||r.country;r.updated=lupd;r.err=null;}
+      else r.err='Jaama ei leitud';
+    }
+    newRivers.push({...r,err:r.err||null});
+  }
+  rivers=newRivers;
+}
+
+// Lähtesta vaikimisi nimekiri (kustutab kõik kasutaja kustutused ja muudatused)
+function resetDefaults(){
+  if(!confirm('Lähtesta nimekiri vaikimisi olekusse?\n\nSee taastab kõik vaikimisi jõed (kui olid kustutanud) ja eemaldab sinu muudatused vaikimisi jõgede piirides.\n\nSinu enda lisatud jõed jäävad alles.'))return;
+  saveDeleted([]);
+  saveCustomized({});
+  buildRivers();
+  lsSave();
+  render();
+}
+
+async function init(){
+  // 1) Laadi vaikimisi nimekiri Sheetsist (jookseb paralleelselt veetasemete laadimisega)
+  // 2) Laadi veetasemed
+  document.getElementById('stxt').textContent='Laen vaikimisi nimekirja ja veetasemeid...';
+  document.getElementById('sdot').className='sdot loading';
+  try{
+    await Promise.all([loadDefaults(), loadCSV()]);
+    document.getElementById('sdot').className='sdot';
+    document.getElementById('stxt').textContent=`${allSt.length} jaama laetud · ${fmt(lupd)}`;
+    document.getElementById('lupd').textContent=fmt(lupd);
+    filtSt=[...allSt];
+  }catch(e){
+    document.getElementById('sdot').className='sdot err';
+    document.getElementById('stxt').textContent='Viga: '+e.message;
+  }
+  // 3) Ehita kasutaja nimekiri (defaults + kasutaja kohandused)
+  buildRivers();
+  render();
 }
 init();
 </script>
