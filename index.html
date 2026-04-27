@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Veeretked.ee — Jõgede Veetasemed</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -66,6 +68,36 @@
   .extra.up b { color:var(--green); }
   .extra.down b { color:var(--orange); }
   .cache-tag { font-size:10px; padding:3px 7px; border-radius:5px; background:var(--orange-bg); color:var(--orange); font-family:'DM Mono',monospace; display:inline-flex; align-items:center; gap:3px; margin-top:6px; border:1px solid #f0b97a; }
+  /* Veepeale modal */
+  .vmodal { width: 720px; max-width: 96vw; max-height: 92vh; }
+  .vp-title { font-size:18px; font-weight:600; margin-bottom:6px; }
+  .vp-sub { font-size:12px; color:var(--text3); margin-bottom:14px; font-family:'DM Mono',monospace; }
+  .vp-tabs { display:flex; gap:4px; margin-bottom:12px; background:var(--bg); border-radius:8px; padding:4px; flex-wrap:wrap; }
+  .vp-tab { font-size:12px; font-weight:500; padding:7px 12px; border-radius:6px; border:none; background:transparent; color:var(--text2); cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .vp-tab.active { background:var(--surface); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.1); }
+  .vp-loik-info { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .vp-info-pill { font-size:11px; padding:4px 9px; border-radius:7px; background:var(--bg); color:var(--text2); border:1px solid var(--surface2); display:inline-flex; align-items:center; gap:5px; font-family:'DM Mono',monospace; }
+  .vp-info-pill b { color:var(--text); font-weight:500; }
+  .vp-loik-mark { font-size:13px; color:var(--text); margin-bottom:12px; padding:10px 12px; background:var(--bg); border-radius:8px; line-height:1.5; }
+  #vmap { height: 380px; border-radius: 10px; border: 1px solid var(--border); margin-bottom:12px; z-index:1; }
+  .leaflet-popup-content-wrapper { border-radius: 7px; }
+  .leaflet-popup-content { font-family:'DM Sans',sans-serif; font-size:12px; margin:8px 12px; }
+  .leaflet-popup-content b { font-size:13px; color:var(--text); }
+  .vp-contact { margin-top:14px; padding:14px; background:var(--green-bg); border:1px solid #a7d9bc; border-radius:10px; }
+  .vp-contact-title { font-weight:600; font-size:14px; color:var(--green); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+  .vp-contact-features { display:flex; flex-wrap:wrap; gap:6px 12px; font-size:12px; color:var(--text); margin-bottom:10px; }
+  .vp-contact-features span:before { content:'✓ '; color:var(--green); font-weight:600; }
+  .vp-contact-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .vp-contact-btn { font-size:12px; padding:7px 12px; border-radius:7px; border:1px solid var(--green); background:var(--surface); color:var(--green); cursor:pointer; font-weight:500; text-decoration:none; display:inline-flex; align-items:center; gap:5px; font-family:'DM Sans',sans-serif; }
+  .vp-contact-btn:hover { background:var(--green-bg); }
+  .vp-contact-btn.primary { background:var(--green); color:#fff; }
+  .vp-contact-btn.primary:hover { background:#0f4f37; }
+  .vp-empty { padding:40px 20px; text-align:center; color:var(--text3); font-size:14px; }
+  .vp-legend { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; font-size:11px; color:var(--text2); }
+  .vp-legend-item { display:inline-flex; align-items:center; gap:4px; }
+  .vp-legend-dot { width:12px; height:12px; border-radius:50%; display:inline-block; }
+  .vp-btn { font-size:11px; padding:5px 10px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text2); cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .vp-btn:hover { background:var(--surface2); }
   .card-foot { display:flex; align-items:center; justify-content:space-between; padding-top:10px; border-top:1px solid var(--surface2); gap:6px; flex-wrap:wrap; }
   .foot-src { font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; display:flex; align-items:center; gap:4px; }
   .fdot { width:5px; height:5px; border-radius:50%; }
@@ -175,6 +207,18 @@
   </div>
 </div>
 
+<div class="overlay" id="vmodal">
+  <div class="modal vmodal">
+    <div class="vp-title" id="vp-title">🗺️ Veepeale</div>
+    <div class="vp-sub" id="vp-sub">—</div>
+    <div class="vp-tabs" id="vp-tabs"></div>
+    <div id="vp-content"></div>
+    <div class="mact">
+      <button class="btn btn-primary" onclick="closeV()">Sulge</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const SK='rv9';
 // A=Veekogu, B=Jaam, C=Veetase(cm) — täpselt sinu Sheetsi struktuur
@@ -185,6 +229,8 @@ const GVIZ_LV_DATA='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?
 const GVIZ_DEFAULTS='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=2023148913';
 const GVIZ_CACHE_EE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=2068334598';
 const GVIZ_CACHE_LV='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=296812902';
+const GVIZ_LOIGUD='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=1946905220';
+const GVIZ_PUNKTID='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=1674967644';
 
 // Läti jaamade -> jõgede/veekogude kaardistus (jaama nime järgi, normaliseeritud)
 // Allikas: LVĢMC PRIS süsteem, LVĢMC dokumendid, geograafia
@@ -266,8 +312,24 @@ for(const k in LV_RIVERS){
 
 let rivers=[], liveData={}, allSt=[], filtSt=[], selSt=null, editId=null, atab='l', busy=false, lupd=null;
 let defaults=[]; // Sinu Sheetsist tulevad vaikimisi jõed
+let loigud=[]; // Jõgede lõigud
+let punktid=[]; // Lõikude punktid (veeskamine, laager, jne)
+let activeLoik=null; // Praegu vaadeldav lõik
+let vMap=null; // Leaflet map instance
 const SK_DELETED='rv9_deleted'; // Kasutaja eemaldatud vaikimisi jõed (jaam-nimed)
 const SK_CUSTOMIZED='rv9_customized'; // Kasutaja muudetud jõed (jaam -> {kayakMin, raftMin, ...})
+
+// Parsi koordinaadid stringist "57.85, 27.10" → [57.85, 27.10]
+function parseCoords(s){
+  if(!s)return null;
+  const str=String(s).trim();
+  const parts=str.split(/[,;]/).map(p=>p.trim());
+  if(parts.length<2)return null;
+  const lat=parseFloat(parts[0].replace(',','.'));
+  const lng=parseFloat(parts[1].replace(',','.'));
+  if(isNaN(lat)||isNaN(lng))return null;
+  return [lat,lng];
+}
 
 function lsLoad(){try{const r=localStorage.getItem(SK);if(r)return JSON.parse(r);}catch(e){}return null;}
 function lsSave(){try{
@@ -553,7 +615,7 @@ async function refreshAll(){
   document.getElementById('stxt').textContent='Laen andmeid...';
   render();
   try{
-    await Promise.all([loadDefaults(), loadCSV()]);
+    await Promise.all([loadDefaults(), loadCSV(), loadLoigud(), loadPunktid()]);
     buildRivers();
     lsSave();
     const cnt=allSt.length;
@@ -630,6 +692,7 @@ function renderCard(r){
       ${r.airT!=null?`<span class="extra"><span class="ex-lbl">🌡 õhk</span><b>${r.airT}°C</b></span>`:''}
     </div>`:''}
     <div class="pills" style="margin-top:10px;">${spill(r,'k')}${spill(r,'r')}</div>
+    ${hasLoigud(r.jogi)?`<button class="vp-btn" style="margin-bottom:8px;width:100%;" onclick="openV('${(r.jogi||'').replace(/'/g,"\\'")}')">🗺️ Veepeale — vaata teekondi</button>`:''}
     ${r.isCache?`<div class="cache-tag">⏱ Vanad andmed (varuandmed)</div>`:''}
     <div class="card-foot">
       <span class="foot-src"><span class="fdot ${r.isLive?'live':'man'}"></span>${r.isLive?'KA · ':'Käsitsi · '}${fmt(r.updated)}</span>
@@ -882,6 +945,79 @@ async function loadDefaults(){
 }
 
 // Loe localStoragest kasutaja kustutused ja muudatused
+// Lae lõigud Sheetsist
+async function loadLoigud(){
+  loigud=[];
+  try{
+    const t=await fetchGvizJSON(GVIZ_LOIGUD);
+    if(!t.cols||!t.rows)return;
+    let jogiIdx=-1, idIdx=-1, nimiIdx=-1, algusIdx=-1, loppIdx=-1, pikkusIdx=-1, raskIdx=-1, markIdx=-1;
+    for(let i=0;i<t.cols.length;i++){
+      const lbl=((t.cols[i].label||'')+' '+(t.cols[i].id||'')).toLowerCase();
+      if(jogiIdx<0&&(lbl.includes('jogi')||lbl.includes('jõgi')))jogiIdx=i;
+      else if(idIdx<0&&(lbl.includes('loikid')||lbl.includes('lõikid')))idIdx=i;
+      else if(nimiIdx<0&&(lbl.includes('loikunimi')||lbl.includes('lõikunimi')||lbl.includes('nimi')))nimiIdx=i;
+      else if(algusIdx<0&&lbl.includes('algus'))algusIdx=i;
+      else if(loppIdx<0&&(lbl.includes('lopp')||lbl.includes('lõpp')))loppIdx=i;
+      else if(pikkusIdx<0&&lbl.includes('pikkus'))pikkusIdx=i;
+      else if(raskIdx<0&&lbl.includes('rask'))raskIdx=i;
+      else if(markIdx<0&&(lbl.includes('mark')||lbl.includes('märk')))markIdx=i;
+    }
+    const str=(c)=>(c&&c.v!=null)?String(c.v).trim():'';
+    const numv=(c)=>{if(!c||c.v==null)return null;const v=typeof c.v==='number'?c.v:parseFloat(String(c.v).replace(',','.'));return isNaN(v)?null:v;};
+    for(const row of t.rows){
+      const c=row.c;if(!c)continue;
+      const jogi=str(c[jogiIdx>=0?jogiIdx:0]);
+      const id=str(c[idIdx>=0?idIdx:1]);
+      if(!jogi||!id)continue;
+      loigud.push({
+        jogi, id,
+        nimi:str(c[nimiIdx>=0?nimiIdx:2]),
+        algus:parseCoords(str(c[algusIdx>=0?algusIdx:3])),
+        lopp:parseCoords(str(c[loppIdx>=0?loppIdx:4])),
+        pikkus:numv(c[pikkusIdx>=0?pikkusIdx:5]),
+        raskus:str(c[raskIdx>=0?raskIdx:6]),
+        markused:str(c[markIdx>=0?markIdx:7])
+      });
+    }
+  }catch(e){console.warn('Lõikude laadimine ebaõnnestus:',e);}
+}
+
+// Lae punktid Sheetsist
+async function loadPunktid(){
+  punktid=[];
+  try{
+    const t=await fetchGvizJSON(GVIZ_PUNKTID);
+    if(!t.cols||!t.rows)return;
+    let jogiIdx=-1, lidIdx=-1, tyypIdx=-1, nimiIdx=-1, koorIdx=-1, markIdx=-1;
+    for(let i=0;i<t.cols.length;i++){
+      const lbl=((t.cols[i].label||'')+' '+(t.cols[i].id||'')).toLowerCase();
+      if(jogiIdx<0&&(lbl.includes('jogi')||lbl.includes('jõgi')))jogiIdx=i;
+      else if(lidIdx<0&&(lbl.includes('loikid')||lbl.includes('lõikid')))lidIdx=i;
+      else if(tyypIdx<0&&(lbl.includes('tyyp')||lbl.includes('tüüp')))tyypIdx=i;
+      else if(nimiIdx<0&&lbl.includes('nimi'))nimiIdx=i;
+      else if(koorIdx<0&&(lbl.includes('koord')||lbl.includes('kord')))koorIdx=i;
+      else if(markIdx<0&&(lbl.includes('mark')||lbl.includes('märk')))markIdx=i;
+    }
+    const str=(c)=>(c&&c.v!=null)?String(c.v).trim():'';
+    for(const row of t.rows){
+      const c=row.c;if(!c)continue;
+      const jogi=str(c[jogiIdx>=0?jogiIdx:0]);
+      const lid=str(c[lidIdx>=0?lidIdx:1]);
+      if(!jogi)continue;
+      const koor=parseCoords(str(c[koorIdx>=0?koorIdx:4]));
+      if(!koor)continue;
+      punktid.push({
+        jogi, loikId:lid,
+        tyyp:str(c[tyypIdx>=0?tyypIdx:2]).toLowerCase(),
+        nimi:str(c[nimiIdx>=0?nimiIdx:3]),
+        koor,
+        markused:str(c[markIdx>=0?markIdx:5])
+      });
+    }
+  }catch(e){console.warn('Punktide laadimine ebaõnnestus:',e);}
+}
+
 function loadUserState(){
   let deleted=[], customized={};
   try{const r=localStorage.getItem(SK_DELETED);if(r)deleted=JSON.parse(r);}catch(e){}
@@ -952,13 +1088,179 @@ function resetDefaults(){
   render();
 }
 
+// =============== VEEPEALE MODAL ===============
+
+// Tagastab true, kui sellele jõele on Sheets'is lõike
+function hasLoigud(jogi){
+  if(!jogi)return false;
+  const j=jogi.toLowerCase();
+  return loigud.some(l=>l.jogi.toLowerCase()===j);
+}
+
+// Avage Veepeale modaali kindlale jõele
+function openV(jogi){
+  activeLoik=null;
+  // Leia jõe lõigud
+  const j=jogi.toLowerCase();
+  const myLoigud=loigud.filter(l=>l.jogi.toLowerCase()===j);
+  if(myLoigud.length===0){
+    alert('Sellel jõel pole hetkel lõike sisestatud.');
+    return;
+  }
+  document.getElementById('vp-title').textContent='🗺️ '+jogi;
+  document.getElementById('vp-sub').textContent=myLoigud.length+' lõik'+(myLoigud.length>1?'u':'')+' · '+punktid.filter(p=>p.jogi.toLowerCase()===j).length+' punkti';
+  // Tabid lõikude kaupa
+  const tabsEl=document.getElementById('vp-tabs');
+  tabsEl.innerHTML=myLoigud.map((l,i)=>`<button class="vp-tab ${i===0?'active':''}" onclick="selectLoik('${l.id}')">${l.id}: ${l.nimi||l.id}</button>`).join('');
+  // Vali esimene
+  selectLoik(myLoigud[0].id);
+  document.getElementById('vmodal').classList.add('open');
+}
+
+function closeV(){
+  document.getElementById('vmodal').classList.remove('open');
+  if(vMap){
+    vMap.remove();
+    vMap=null;
+  }
+  activeLoik=null;
+}
+
+// Vali konkreetne lõik kuvamiseks
+function selectLoik(loikId){
+  const l=loigud.find(ll=>ll.id===loikId);
+  if(!l)return;
+  activeLoik=l;
+  // Aktiveeri tab
+  document.querySelectorAll('.vp-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.vp-tab').forEach(t=>{if(t.textContent.startsWith(loikId+':'))t.classList.add('active');});
+  // Render content
+  renderLoik(l);
+}
+
+// Render lõigu sisu (info + kaart + kontakt)
+function renderLoik(l){
+  const myPunktid=punktid.filter(p=>p.jogi.toLowerCase()===l.jogi.toLowerCase()&&p.loikId===l.id);
+  const tyypIcons={
+    'veeskamine':'🚤','valjavotmine':'🏁','laager':'🏕️','vaatamisvaarsus':'👁️','oht':'⚠️'
+  };
+  const tyypNames={
+    'veeskamine':'Veeskamine','valjavotmine':'Väljavõtmine','laager':'Laager','vaatamisvaarsus':'Vaatamisväärsus','oht':'Oht'
+  };
+  // HTML
+  let html='';
+  // Info pillid
+  html+='<div class="vp-loik-info">';
+  if(l.pikkus)html+=`<span class="vp-info-pill">📏 <b>${l.pikkus} km</b></span>`;
+  if(l.raskus)html+=`<span class="vp-info-pill">⚡ <b>${l.raskus}</b></span>`;
+  html+=`<span class="vp-info-pill">📍 <b>${myPunktid.length} punkti</b></span>`;
+  html+='</div>';
+  // Märkused
+  if(l.markused)html+=`<div class="vp-loik-mark">${l.markused}</div>`;
+  // Legend
+  const usedTypes=new Set(myPunktid.map(p=>p.tyyp));
+  if(usedTypes.size>0){
+    html+='<div class="vp-legend">';
+    for(const t of usedTypes){
+      html+=`<span class="vp-legend-item">${tyypIcons[t]||'📍'} ${tyypNames[t]||t}</span>`;
+    }
+    html+='</div>';
+  }
+  // Kaart
+  html+='<div id="vmap"></div>';
+  // Kontaktinfo plokk (Veeretked.ee)
+  html+=`<div class="vp-contact">
+    <div class="vp-contact-title">🚣 Soovid sellele lõigule matka?</div>
+    <div class="vp-contact-features">
+      <span>Paadid ja varustus</span>
+      <span>Transport</span>
+      <span>Juhendaja</span>
+      <span>Toitlustus</span>
+    </div>
+    <div class="vp-contact-actions">
+      <a href="mailto:info@veeretked.ee?subject=Päring: ${encodeURIComponent(l.jogi+' / '+l.nimi)}" class="vp-contact-btn primary">📧 Saada päring</a>
+      <a href="https://veeretked.ee" target="_blank" rel="noopener" class="vp-contact-btn">🌐 veeretked.ee</a>
+    </div>
+  </div>`;
+  document.getElementById('vp-content').innerHTML=html;
+  // Initialize map
+  setTimeout(()=>initLoikMap(l, myPunktid), 80);
+}
+
+// Initialize Leaflet map
+function initLoikMap(l, myPunktid){
+  if(vMap){
+    vMap.remove();
+    vMap=null;
+  }
+  const mapEl=document.getElementById('vmap');
+  if(!mapEl)return;
+  // Default center
+  let center=[58.5, 25.5]; // Eesti keskpaik
+  if(l.algus)center=l.algus;
+  vMap=L.map('vmap').setView(center, 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 18
+  }).addTo(vMap);
+
+  // Joonista lõigu joon (algus → lõpp)
+  if(l.algus&&l.lopp){
+    L.polyline([l.algus, l.lopp], {color:'#2d5a3d', weight:4, opacity:0.7}).addTo(vMap);
+    // Markerid algus ja lõpp
+    L.marker(l.algus, {icon:makeMapIcon('🅰️', '#2d5a3d')}).addTo(vMap)
+      .bindPopup(`<b>Algus</b><br>${l.nimi||''}`);
+    L.marker(l.lopp, {icon:makeMapIcon('🅱️', '#8b1a1a')}).addTo(vMap)
+      .bindPopup(`<b>Lõpp</b><br>${l.nimi||''}`);
+  }
+
+  // Markerid punktidele
+  const tyypColors={
+    'veeskamine':'#2d5a3d','valjavotmine':'#8b1a1a','laager':'#9a4e00',
+    'vaatamisvaarsus':'#5a5550','oht':'#dc2626'
+  };
+  const tyypEmojis={
+    'veeskamine':'🚤','valjavotmine':'🏁','laager':'🏕️','vaatamisvaarsus':'👁️','oht':'⚠️'
+  };
+  const allPoints=[];
+  if(l.algus)allPoints.push(l.algus);
+  if(l.lopp)allPoints.push(l.lopp);
+  for(const p of myPunktid){
+    if(!p.koor)continue;
+    allPoints.push(p.koor);
+    const emoji=tyypEmojis[p.tyyp]||'📍';
+    const color=tyypColors[p.tyyp]||'#6b6660';
+    const marker=L.marker(p.koor, {icon:makeMapIcon(emoji, color)}).addTo(vMap);
+    let popup=`<b>${p.nimi||p.tyyp}</b>`;
+    if(p.markused)popup+=`<br>${p.markused}`;
+    popup+=`<br><a href="https://www.google.com/maps?q=${p.koor[0]},${p.koor[1]}" target="_blank" style="font-size:11px;">📍 Google Mapsis</a>`;
+    marker.bindPopup(popup);
+  }
+
+  // Sobita kaart kõigi punktide järgi
+  if(allPoints.length>0){
+    const bounds=L.latLngBounds(allPoints);
+    vMap.fitBounds(bounds, {padding:[30,30]});
+  }
+}
+
+// Tee custom marker ikoonid
+function makeMapIcon(emoji, color){
+  return L.divIcon({
+    html:`<div style="background:${color};width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3);"><div style="transform:rotate(45deg);font-size:14px;">${emoji}</div></div>`,
+    className:'',
+    iconSize:[30,30],
+    iconAnchor:[15,28]
+  });
+}
+
 async function init(){
   // 1) Laadi vaikimisi nimekiri Sheetsist (jookseb paralleelselt veetasemete laadimisega)
   // 2) Laadi veetasemed
   document.getElementById('stxt').textContent='Laen vaikimisi nimekirja ja veetasemeid...';
   document.getElementById('sdot').className='sdot loading';
   try{
-    await Promise.all([loadDefaults(), loadCSV()]);
+    await Promise.all([loadDefaults(), loadCSV(), loadLoigud(), loadPunktid()]);
     document.getElementById('sdot').className='sdot';
     const cacheCnt=allSt.filter(s=>s.isCache).length;
     const txt=cacheCnt>0?`${allSt.length} jaama laetud (${cacheCnt} varuandmetest) · ${fmt(lupd)}`:`${allSt.length} jaama laetud · ${fmt(lupd)}`;
