@@ -35,6 +35,7 @@
   .sdot.loading { animation: pulse 1.2s infinite; }
   .sdot.err { background: #dc2626; }
   @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+  @keyframes gpspulse { 0%{transform:scale(0.4);opacity:0.7} 100%{transform:scale(1.4);opacity:0} }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; position: relative; }
   .card::before { content:''; position:absolute; left:0; top:12px; bottom:12px; width:3px; border-radius:0 2px 2px 0; }
@@ -79,7 +80,10 @@
   .vp-info-pill { font-size:11px; padding:4px 9px; border-radius:7px; background:var(--bg); color:var(--text2); border:1px solid var(--surface2); display:inline-flex; align-items:center; gap:5px; font-family:'DM Mono',monospace; }
   .vp-info-pill b { color:var(--text); font-weight:500; }
   .vp-loik-mark { font-size:13px; color:var(--text); margin-bottom:12px; padding:10px 12px; background:var(--bg); border-radius:8px; line-height:1.5; }
-  #vmap { height: 380px; border-radius: 10px; border: 1px solid var(--border); margin-bottom:12px; z-index:1; }
+  #vmap { height: 380px; border-radius: 10px; border: 1px solid var(--border); margin-bottom:12px; z-index:1; position:relative; }
+  .gps-controls { position:absolute; top:10px; right:10px; z-index:1000; display:flex; flex-direction:column; gap:6px; }
+  .gps-controls button { background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:8px 12px; font-size:12px; font-weight:500; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.15); font-family:'DM Sans',sans-serif; color:var(--text); white-space:nowrap; }
+  .gps-controls button:hover { background:var(--surface2); }
   .leaflet-popup-content-wrapper { border-radius: 7px; }
   .leaflet-popup-content { font-family:'DM Sans',sans-serif; font-size:12px; margin:8px 12px; }
   .leaflet-popup-content b { font-size:13px; color:var(--text); }
@@ -316,6 +320,10 @@ let loigud=[]; // Jõgede lõigud
 let punktid=[]; // Lõikude punktid (veeskamine, laager, jne)
 let activeLoik=null; // Praegu vaadeldav lõik
 let vMap=null; // Leaflet map instance
+let gpsWatchId=null; // GPS jälgimise ID
+let gpsMarker=null; // Sinine täpp kaardil
+let gpsCircle=null; // Täpsuse ring
+let gpsFollowing=false; // Kas kaart järgib kasutajat
 const SK_DELETED='rv9_deleted'; // Kasutaja eemaldatud vaikimisi jõed (jaam-nimed)
 const SK_CUSTOMIZED='rv9_customized'; // Kasutaja muudetud jõed (jaam -> {kayakMin, raftMin, ...})
 
@@ -1121,6 +1129,7 @@ function openV(jogi){
 
 function closeV(){
   document.getElementById('vmodal').classList.remove('open');
+  stopGps();
   if(vMap){
     vMap.remove();
     vMap=null;
@@ -1168,8 +1177,8 @@ function renderLoik(l){
     }
     html+='</div>';
   }
-  // Kaart
-  html+='<div id="vmap"></div>';
+  // Kaart (koos GPS nupuga)
+  html+='<div style="position:relative;"><div id="vmap"></div><div class="gps-controls"><button id="gps-btn" onclick="toggleGps()">📍 Mu asukoht</button></div></div>';
   // Kontaktinfo plokk (Veeretked.ee)
   html+=`<div class="vp-contact">
     <div class="vp-contact-title">🚣 Soovid sellele lõigule matka?</div>
@@ -1221,6 +1230,9 @@ function initLoikMap(l, myPunktid){
     vMap.remove();
     vMap=null;
   }
+  // Reset GPS markerid (jälgimine jätkub, aga uue kaardi peale uued markerid)
+  gpsMarker=null;
+  gpsCircle=null;
   const mapEl=document.getElementById('vmap');
   if(!mapEl)return;
   // Default center
@@ -1294,6 +1306,103 @@ function makeMapIcon(emoji, color){
     iconSize:[30,30],
     iconAnchor:[15,28]
   });
+}
+
+// =============== GPS TRACKING ===============
+
+// Tee sinine täpp kasutaja asukoha jaoks
+function makeGpsIcon(){
+  return L.divIcon({
+    html:`<div style="position:relative;width:18px;height:18px;">
+      <div style="position:absolute;inset:0;background:#3b82f6;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px rgba(59,130,246,0.4),0 2px 6px rgba(0,0,0,0.3);"></div>
+      <div style="position:absolute;inset:-8px;background:rgba(59,130,246,0.15);border-radius:50%;animation:gpspulse 2s ease-out infinite;"></div>
+    </div>`,
+    className:'',
+    iconSize:[18,18],
+    iconAnchor:[9,9]
+  });
+}
+
+// Lülita GPS jälgimine sisse/välja
+function toggleGps(){
+  const btn=document.getElementById('gps-btn');
+  if(gpsWatchId!==null){
+    // Lülita välja
+    stopGps();
+    if(btn)btn.innerHTML='📍 Mu asukoht';
+    return;
+  }
+  // Lülita sisse
+  if(!navigator.geolocation){
+    alert('Sinu brauser ei toeta asukoha jälgimist.');
+    return;
+  }
+  if(btn)btn.innerHTML='⏳ Otsin...';
+  // Esimene asukoht (kiire fix)
+  navigator.geolocation.getCurrentPosition(
+    pos=>updateGps(pos, true),
+    err=>{
+      if(btn)btn.innerHTML='📍 Mu asukoht';
+      let msg='Asukoha leidmine ebaõnnestus.';
+      if(err.code===1)msg='Andsid loaks "Keela" — luba brauseri seadetes asukoha jagamine.';
+      else if(err.code===2)msg='GPS-signaal pole saadaval. Mine välja, kus on parem signaal.';
+      else if(err.code===3)msg='Asukoha leidmine võttis liiga kaua aega.';
+      alert(msg);
+    },
+    {enableHighAccuracy:true, timeout:15000, maximumAge:0}
+  );
+  // Pidev jälgimine
+  gpsWatchId=navigator.geolocation.watchPosition(
+    pos=>updateGps(pos, false),
+    err=>console.warn('GPS viga:',err),
+    {enableHighAccuracy:true, timeout:30000, maximumAge:5000}
+  );
+  gpsFollowing=true;
+}
+
+function stopGps(){
+  if(gpsWatchId!==null){
+    navigator.geolocation.clearWatch(gpsWatchId);
+    gpsWatchId=null;
+  }
+  if(gpsMarker&&vMap){vMap.removeLayer(gpsMarker);gpsMarker=null;}
+  if(gpsCircle&&vMap){vMap.removeLayer(gpsCircle);gpsCircle=null;}
+  gpsFollowing=false;
+}
+
+function updateGps(pos, firstFix){
+  if(!vMap)return;
+  const lat=pos.coords.latitude;
+  const lng=pos.coords.longitude;
+  const acc=pos.coords.accuracy||50;
+  const latlng=[lat,lng];
+  // Marker
+  if(!gpsMarker){
+    gpsMarker=L.marker(latlng, {icon:makeGpsIcon(), zIndexOffset:1000}).addTo(vMap);
+    gpsMarker.bindPopup(`<b>📍 Sina oled siin</b><br>Täpsus: ±${Math.round(acc)} m`);
+  } else {
+    gpsMarker.setLatLng(latlng);
+    gpsMarker.setPopupContent(`<b>📍 Sina oled siin</b><br>Täpsus: ±${Math.round(acc)} m`);
+  }
+  // Täpsuse ring
+  if(!gpsCircle){
+    gpsCircle=L.circle(latlng, {radius:acc, color:'#3b82f6', weight:1, fillOpacity:0.08}).addTo(vMap);
+  } else {
+    gpsCircle.setLatLng(latlng);
+    gpsCircle.setRadius(acc);
+  }
+  // Esimese fix korral suumime peale; pärast kasutaja võib käsitsi liikuda
+  if(firstFix&&gpsFollowing){
+    vMap.setView(latlng, Math.max(vMap.getZoom(), 14));
+  }
+  const btn=document.getElementById('gps-btn');
+  if(btn)btn.innerHTML='🎯 Kesken minu peale';
+}
+
+// "Kesken minu peale" — suumib kaardi GPS asukohale
+function centerOnGps(){
+  if(!gpsMarker||!vMap)return;
+  vMap.setView(gpsMarker.getLatLng(), 15);
 }
 
 async function init(){
