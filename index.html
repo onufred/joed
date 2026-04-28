@@ -88,6 +88,39 @@
   .gpsi-item { text-align:center; flex:1; min-width:0; }
   .gpsi-lbl { font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; margin-bottom:2px; white-space:nowrap; }
   .gpsi-val { font-size:14px; font-weight:600; color:var(--text); font-family:'DM Mono',monospace; white-space:nowrap; }
+  /* Ilmaprognoosi paneel */
+  .weather-panel { padding:12px; background:var(--bg); border:1px solid var(--border); border-radius:10px; margin-bottom:12px; font-size:13px; color:var(--text2); }
+  .weather-panel.loaded { padding:14px; }
+  .wp-current { display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; padding-bottom:12px; border-bottom:1px solid var(--surface2); margin-bottom:12px; }
+  .wp-cur-main { display:flex; align-items:center; gap:12px; }
+  .wp-cur-emoji { font-size:42px; line-height:1; }
+  .wp-cur-temp { font-size:24px; font-weight:600; color:var(--text); font-family:'DM Mono',monospace; }
+  .wp-cur-desc { font-size:12px; color:var(--text3); margin-top:2px; }
+  .wp-cur-side { display:flex; gap:14px; flex-wrap:wrap; }
+  .wp-side-item { font-size:12px; }
+  .wp-side-lbl { color:var(--text3); margin-bottom:2px; }
+  .wp-side-val { font-weight:600; color:var(--text); font-family:'DM Mono',monospace; display:inline-flex; align-items:center; gap:4px; }
+  .wp-arrow { display:inline-block; color:var(--accent); font-size:14px; transform-origin:center; }
+  .wp-forecast { display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; }
+  .wp-day { text-align:center; padding:8px 4px; background:var(--surface); border:1px solid var(--surface2); border-radius:8px; font-size:11px; }
+  .wp-day-name { font-weight:600; color:var(--text); margin-bottom:4px; }
+  .wp-day-emoji { font-size:24px; line-height:1; margin:4px 0; }
+  .wp-day-temp { font-family:'DM Mono',monospace; }
+  .wp-day-temp b { font-size:13px; color:var(--text); }
+  .wp-day-temp span { color:var(--text3); margin-left:3px; font-size:11px; }
+  .wp-day-prec { color:#3b82f6; font-size:10px; margin-top:2px; font-family:'DM Mono',monospace; }
+  .wp-day-wind { color:var(--text3); font-size:10px; font-family:'DM Mono',monospace; }
+  /* Graafikud */
+  .g-section { margin-bottom:18px; }
+  .g-section-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:8px; }
+  .g-bars { display:flex; gap:1px; align-items:flex-end; height:62px; padding:0 2px; background:var(--bg); border:1px solid var(--surface2); border-radius:6px; padding-top:2px; padding-bottom:2px; }
+  .g-bar { flex:1; min-width:3px; display:flex; align-items:flex-end; justify-content:center; height:60px; position:relative; }
+  .g-bar.new-day { border-left:1px dashed var(--text3); }
+  .g-bar-fill { width:100%; border-radius:1px 1px 0 0; transition:height .3s; min-height:1px; }
+  .g-line { background:var(--bg); border:1px solid var(--surface2); border-radius:6px; padding:4px; }
+  .g-axis { position:relative; height:14px; margin-top:2px; }
+  .g-axis-lbl { position:absolute; font-size:9px; color:var(--text3); font-family:'DM Mono',monospace; transform:translateX(-50%); }
+  .g-note { background:var(--green-bg); border:1px solid #a7d9bc; border-radius:8px; padding:10px 12px; font-size:12px; color:var(--text); margin-top:14px; }
   .leaflet-popup-content-wrapper { border-radius: 7px; }
   .leaflet-popup-content { font-family:'DM Sans',sans-serif; font-size:12px; margin:8px 12px; }
   .leaflet-popup-content b { font-size:13px; color:var(--text); }
@@ -201,6 +234,17 @@
     <div id="vp-content"></div>
     <div class="mact">
       <button class="btn btn-primary" onclick="closeV()">Sulge</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="gmodal">
+  <div class="modal vmodal">
+    <div class="vp-title" id="g-title">📊 Ilm ja veetase</div>
+    <div class="vp-sub" id="g-sub">—</div>
+    <div id="g-content" style="margin-top:8px;"></div>
+    <div class="mact">
+      <button class="btn btn-primary" onclick="closeGraph()">Sulge</button>
     </div>
   </div>
 </div>
@@ -1149,11 +1193,12 @@ function renderLoik(l){
   };
   // HTML
   let html='';
-  // Info pillid
+  // Info pillid + tegevuste nupud
   html+='<div class="vp-loik-info">';
   if(l.pikkus)html+=`<span class="vp-info-pill">📏 <b>${l.pikkus} km</b></span>`;
   if(l.raskus)html+=`<span class="vp-info-pill">⚡ <b>${l.raskus}</b></span>`;
   html+=`<span class="vp-info-pill">📍 <b>${myPunktid.length} punkti</b></span>`;
+  html+=`<button class="vp-btn" style="margin-left:auto;" onclick="openGraph('${(l.jogi||'').replace(/'/g,"\\\\'")}', ${l.algus?l.algus[0]:'null'}, ${l.algus?l.algus[1]:'null'})">📊 Graafik</button>`;
   html+='</div>';
   // Märkused
   if(l.markused)html+=`<div class="vp-loik-mark">${l.markused}</div>`;
@@ -1168,6 +1213,8 @@ function renderLoik(l){
   }
   // Kaart (koos GPS nupuga)
   html+='<div style="position:relative;"><div id="vmap"></div><div class="gps-controls"><button id="gps-btn" onclick="toggleGps()">📍 Mu asukoht</button></div><div id="gps-info" class="gps-info" style="display:none;"></div></div>';
+  // Ilmaprognoosi paneel (täidetakse asünkroonselt)
+  html+='<div id="weather-panel" class="weather-panel">⏳ Laen ilmaprognoosi...</div>';
   // Kontaktinfo plokk (Veeretked.ee)
   html+=`<div class="vp-contact">
     <div class="vp-contact-title">🚣 Soovid sellele lõigule matka?</div>
@@ -1185,11 +1232,225 @@ function renderLoik(l){
   document.getElementById('vp-content').innerHTML=html;
   // Initialize map
   setTimeout(()=>initLoikMap(l, myPunktid), 80);
+  // Lae ilmaprognoos (asünkr.)
+  if(l.algus){
+    fetchWeather(l.algus[0], l.algus[1]).then(w=>renderWeather(w));
+  } else {
+    document.getElementById('weather-panel').textContent='Lõigule pole määratud algus-koordinaate';
+  }
 }
 
+// Renderda ilmaprognoosi paneel
+function renderWeather(w){
+  const panel=document.getElementById('weather-panel');
+  if(!panel)return;
+  if(!w||!w.current){
+    panel.textContent='⚠️ Ilmaprognoosi ei õnnestunud laadida';
+    return;
+  }
+  const cur=w.current;
+  const [emoji, desc]=weatherDesc(cur.weather_code);
+  const wind=cur.wind_speed_10m;
+  const windDir=cur.wind_direction_10m;
+  const windText=windDirText(windDir);
+  // Praegune ilm
+  let html=`<div class="wp-current">
+    <div class="wp-cur-main">
+      <span class="wp-cur-emoji">${emoji}</span>
+      <div>
+        <div class="wp-cur-temp">${Math.round(cur.temperature_2m)}°C</div>
+        <div class="wp-cur-desc">${desc}</div>
+      </div>
+    </div>
+    <div class="wp-cur-side">
+      <div class="wp-side-item" title="Tuule kiirus ja suund">
+        <div class="wp-side-lbl">💨 Tuul</div>
+        <div class="wp-side-val">${wind.toFixed(1)} m/s ${windText}<span class="wp-arrow" style="transform:rotate(${(windDir||0)+180}deg);">↑</span></div>
+      </div>
+      <div class="wp-side-item">
+        <div class="wp-side-lbl">🌧️ Sajud</div>
+        <div class="wp-side-val">${cur.precipitation.toFixed(1)} mm</div>
+      </div>
+    </div>
+  </div>`;
+  // 5-päeva prognoos
+  if(w.daily&&w.daily.time){
+    html+='<div class="wp-forecast">';
+    const days=Math.min(5, w.daily.time.length);
+    for(let i=0;i<days;i++){
+      const d=new Date(w.daily.time[i]);
+      const dayName=i===0?'Täna':(i===1?'Homme':['P','E','T','K','N','R','L'][d.getDay()]);
+      const [em]=weatherDesc(w.daily.weather_code[i]);
+      const tmax=Math.round(w.daily.temperature_2m_max[i]);
+      const tmin=Math.round(w.daily.temperature_2m_min[i]);
+      const prec=w.daily.precipitation_sum[i];
+      const wmax=w.daily.wind_speed_10m_max[i];
+      html+=`<div class="wp-day">
+        <div class="wp-day-name">${dayName}</div>
+        <div class="wp-day-emoji">${em}</div>
+        <div class="wp-day-temp"><b>${tmax}°</b><span>${tmin}°</span></div>
+        <div class="wp-day-prec">${prec>0?prec.toFixed(1)+' mm':'—'}</div>
+        <div class="wp-day-wind">💨 ${wmax.toFixed(0)}</div>
+      </div>`;
+    }
+    html+='</div>';
+  }
+  panel.innerHTML=html;
+  panel.classList.add('loaded');
+}
+
+// =============== GRAAFIK MODAL ===============
+
+function openGraph(jogi, lat, lng){
+  document.getElementById('g-title').textContent='📊 '+jogi;
+  document.getElementById('g-sub').textContent='Ilm ja sajud — 48h prognoos';
+  document.getElementById('g-content').innerHTML='⏳ Laen andmeid...';
+  document.getElementById('gmodal').classList.add('open');
+  if(lat&&lng){
+    fetchWeather(lat, lng).then(w=>renderGraph(w));
+  } else {
+    document.getElementById('g-content').innerHTML='Lõigule pole määratud koordinaate';
+  }
+}
+
+function closeGraph(){
+  document.getElementById('gmodal').classList.remove('open');
+}
+
+function renderGraph(w){
+  const el=document.getElementById('g-content');
+  if(!el)return;
+  if(!w||!w.hourly||!w.hourly.time){
+    el.innerHTML='⚠️ Ilmaprognoosi ei õnnestunud laadida';
+    return;
+  }
+  // Esimesed 48 tundi
+  const hours=Math.min(48, w.hourly.time.length);
+  const times=w.hourly.time.slice(0,hours);
+  const temps=w.hourly.temperature_2m.slice(0,hours);
+  const precs=w.hourly.precipitation.slice(0,hours);
+  const winds=w.hourly.wind_speed_10m.slice(0,hours);
+  // Maksimum väärtused skaala jaoks
+  const maxPrec=Math.max(2, ...precs);
+  const maxTemp=Math.max(...temps);
+  const minTemp=Math.min(...temps);
+  const tempRange=Math.max(5, maxTemp-minTemp);
+  const maxWind=Math.max(5, ...winds);
+
+  // Sajude graafik (tulpdiagramm)
+  let precHtml='<div class="g-section"><div class="g-section-title">🌧️ Sajud (mm/h) — kogusumma 48h: <b>'+precs.reduce((a,b)=>a+b,0).toFixed(1)+' mm</b></div><div class="g-bars">';
+  for(let i=0;i<hours;i++){
+    const h=Math.max(2, (precs[i]/maxPrec)*60);
+    const d=new Date(times[i]);
+    const isNewDay=i>0&&d.getDate()!==new Date(times[i-1]).getDate();
+    const cls=isNewDay?'g-bar new-day':'g-bar';
+    const color=precs[i]>5?'#dc2626':(precs[i]>1?'#3b82f6':'#a3c4ee');
+    precHtml+=`<div class="${cls}" title="${d.getHours()}:00 — ${precs[i].toFixed(1)} mm"><div class="g-bar-fill" style="height:${h}px;background:${color};"></div></div>`;
+  }
+  precHtml+='</div><div class="g-axis">';
+  for(let i=0;i<hours;i+=6){
+    const d=new Date(times[i]);
+    const lbl=d.getHours()===0?(['P','E','T','K','N','R','L'][d.getDay()]):d.getHours()+'h';
+    precHtml+=`<span class="g-axis-lbl" style="left:${(i/hours)*100}%;">${lbl}</span>`;
+  }
+  precHtml+='</div></div>';
+
+  // Temperatuuri graafik (joon)
+  let tempHtml='<div class="g-section"><div class="g-section-title">🌡️ Temperatuur (°C)</div><div class="g-line">';
+  // SVG joon
+  const w0=600, h0=80;
+  let path='';
+  for(let i=0;i<hours;i++){
+    const x=(i/(hours-1))*w0;
+    const y=h0-((temps[i]-minTemp)/tempRange)*(h0-10)-5;
+    path+=(i===0?'M':' L')+x.toFixed(1)+','+y.toFixed(1);
+  }
+  tempHtml+=`<svg viewBox="0 0 ${w0} ${h0}" preserveAspectRatio="none" style="width:100%;height:80px;">
+    <path d="${path}" stroke="#d97706" stroke-width="2" fill="none"/>
+  </svg></div>
+  <div class="g-axis">
+    <span class="g-axis-lbl" style="left:0;">${Math.round(temps[0])}°</span>
+    <span class="g-axis-lbl" style="left:50%;">${Math.round(temps[Math.floor(hours/2)])}°</span>
+    <span class="g-axis-lbl" style="left:100%;">${Math.round(temps[hours-1])}°</span>
+  </div>
+  <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:2px;">Vahemik: ${Math.round(minTemp)}° kuni ${Math.round(maxTemp)}°</div>
+  </div>`;
+
+  // Tuule graafik (tulpdiagramm)
+  let windHtml='<div class="g-section"><div class="g-section-title">💨 Tuul (m/s)</div><div class="g-bars">';
+  for(let i=0;i<hours;i++){
+    const h=Math.max(2, (winds[i]/maxWind)*60);
+    const d=new Date(times[i]);
+    const dir=w.hourly.wind_direction_10m?w.hourly.wind_direction_10m[i]:0;
+    const color=winds[i]>=10?'#dc2626':(winds[i]>=6?'#d97706':'#5a8a73');
+    const dirText=windDirText(dir);
+    windHtml+=`<div class="g-bar" title="${d.getHours()}:00 — ${winds[i].toFixed(1)} m/s ${dirText}"><div class="g-bar-fill" style="height:${h}px;background:${color};"></div></div>`;
+  }
+  windHtml+='</div></div>';
+
+  // Veetase märkus (kuna ajalugu pole veel)
+  const waterNote='<div class="g-note">📈 <b>Veetaseme ajalugu</b> tuleb varsti! Praegu kogume andmeid taustal — pärast paari nädalat näeme siin reaalseid trende.</div>';
+
+  el.innerHTML=precHtml+tempHtml+windHtml+waterNote;
+}
 // Initialize Leaflet map
 // Cache jõejoonte jaoks (et ei tõmmataks iga avamise korral uuesti)
 const routeCache={};
+// Cache ilmaprognoosi jaoks (15 min kehtivus)
+const weatherCache={};
+
+// Lae ilmaprognoos (Open-Meteo, tasuta, ilma võtmeta)
+async function fetchWeather(lat, lng){
+  const key=`${lat.toFixed(3)},${lng.toFixed(3)}`;
+  const now=Date.now();
+  if(weatherCache[key]&&(now-weatherCache[key].ts)<15*60*1000){
+    return weatherCache[key].data;
+  }
+  try{
+    const params=[
+      'latitude='+lat,
+      'longitude='+lng,
+      'current=temperature_2m,precipitation,wind_speed_10m,wind_direction_10m,weather_code',
+      'hourly=temperature_2m,precipitation,wind_speed_10m,wind_direction_10m,weather_code',
+      'daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,weather_code',
+      'timezone=auto',
+      'forecast_days=5',
+      'wind_speed_unit=ms'
+    ].join('&');
+    const url='https://api.open-meteo.com/v1/forecast?'+params;
+    const resp=await fetch(url);
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const data=await resp.json();
+    weatherCache[key]={data,ts:now};
+    return data;
+  }catch(e){
+    console.warn('Ilmaprognoosi laadimine ebaõnnestus:',e);
+    return null;
+  }
+}
+
+// WMO ilma kood -> emoji + tekst (eestikeelne)
+function weatherDesc(code){
+  const m={
+    0:['☀️','Selge'],1:['🌤️','Enamasti selge'],2:['⛅','Osaliselt pilves'],3:['☁️','Pilves'],
+    45:['🌫️','Udu'],48:['🌫️','Härmaudu'],
+    51:['🌦️','Kerge tibu'],53:['🌦️','Tibu'],55:['🌦️','Tugev tibu'],
+    61:['🌧️','Kerge vihm'],63:['🌧️','Vihm'],65:['🌧️','Tugev vihm'],
+    71:['🌨️','Kerge lumi'],73:['🌨️','Lumi'],75:['🌨️','Tugev lumi'],
+    77:['🌨️','Lumeterad'],
+    80:['🌦️','Hood vihma'],81:['🌧️','Tugev vihm'],82:['⛈️','Paduvihm'],
+    85:['🌨️','Lumehood'],86:['🌨️','Tugevad lumehood'],
+    95:['⛈️','Äike'],96:['⛈️','Äike rahega'],99:['⛈️','Tugev äike']
+  };
+  return m[code]||['🌡️','—'];
+}
+
+// Tuule suuna kraadid -> nime (Põhjast)
+function windDirText(deg){
+  if(deg==null)return '';
+  const dirs=['P','PI','I','KI','L','LE','E','PE'];
+  return dirs[Math.round(deg/45)%8];
+}
 
 // Lae päris jõejoon BRouter API kaudu
 async function fetchRiverRoute(start, end){
@@ -1293,6 +1554,42 @@ function initLoikMap(l, myPunktid){
     const bounds=L.latLngBounds(allPoints);
     vMap.fitBounds(bounds, {padding:[30,30]});
   }
+
+  // Lisa tuule nool kaardi keskele (asünkroonselt ilmaprognoosi laadimisega)
+  if(l.algus){
+    fetchWeather(l.algus[0], l.algus[1]).then(w=>{
+      if(!w||!w.current||!vMap)return;
+      // Tuule nool umbes keskele
+      let center=l.algus;
+      if(l.lopp){
+        center=[(l.algus[0]+l.lopp[0])/2, (l.algus[1]+l.lopp[1])/2];
+      }
+      const wind=w.current.wind_speed_10m||0;
+      const dir=w.current.wind_direction_10m||0;
+      const windText=windDirText(dir);
+      L.marker(center, {icon:makeWindIcon(dir, wind), zIndexOffset:500}).addTo(vMap)
+        .bindPopup(`<b>💨 Tuul</b><br>${wind.toFixed(1)} m/s ${windText}<br><span style="font-size:10px;color:#666;">Suund kust puhub</span>`);
+    });
+  }
+}
+
+// Tee tuule noole ikoon (nool näitab, KUST puhub - meteoroloogiline standard)
+function makeWindIcon(deg, speed){
+  // Värv kiirusega: roheline (kerge), kollane (mõõdukas), punane (tugev)
+  let color='#1a6b4a';
+  if(speed>=10)color='#dc2626';
+  else if(speed>=6)color='#d97706';
+  // Nool näitab, kust tuul tuleb (rotateerimine deg+180, sest nool näitab "alla", aga me tahame näidata "kust")
+  return L.divIcon({
+    html:`<div style="position:relative;width:34px;height:34px;display:flex;align-items:center;justify-content:center;">
+      <div style="position:absolute;inset:0;background:rgba(255,255,255,0.92);border-radius:50%;border:2px solid ${color};box-shadow:0 2px 5px rgba(0,0,0,0.2);"></div>
+      <div style="position:relative;color:${color};font-size:18px;font-weight:bold;line-height:1;transform:rotate(${deg+180}deg);">↑</div>
+      <div style="position:absolute;bottom:-14px;background:${color};color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;white-space:nowrap;font-family:'DM Mono',monospace;font-weight:600;">${speed.toFixed(0)} m/s</div>
+    </div>`,
+    className:'',
+    iconSize:[34,34],
+    iconAnchor:[17,17]
+  });
 }
 
 // Tee custom marker ikoonid
