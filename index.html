@@ -1290,7 +1290,7 @@ function renderWeather(w){
         <div class="wp-day-emoji">${em}</div>
         <div class="wp-day-temp"><b>${tmax}°</b><span>${tmin}°</span></div>
         <div class="wp-day-prec">${prec>0?prec.toFixed(1)+' mm':'—'}</div>
-        <div class="wp-day-wind">💨 ${wmax.toFixed(0)}</div>
+        <div class="wp-day-wind" title="Maksimaalne tuule kiirus">💨 ${wmax.toFixed(0)} m/s</div>
       </div>`;
     }
     html+='</div>';
