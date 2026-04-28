@@ -105,7 +105,7 @@
   .card-foot { display:flex; align-items:center; justify-content:space-between; padding-top:10px; border-top:1px solid var(--surface2); gap:6px; flex-wrap:wrap; }
   .foot-src { font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; display:flex; align-items:center; gap:4px; }
   .fdot { width:5px; height:5px; border-radius:50%; }
-  .fdot.live{background:var(--green)}.fdot.man{background:var(--text3)}
+  .fdot.live{background:var(--green)}
   .foot-btns { display:flex; gap:4px; align-items:center; }
   .ibtn { font-size:11px; padding:3px 8px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--text2); cursor:pointer; font-family:'DM Sans',sans-serif; }
   .ibtn:hover { background:var(--surface2); }
@@ -113,15 +113,11 @@
   .sp-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
   .sp-row label { font-size:11px; color:var(--text2); min-width:120px; }
   .sp-row input { width:64px; font-size:12px; padding:4px 7px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); text-align:right; font-family:'DM Mono',monospace; }
-  .man-inp { width:64px; font-size:12px; padding:3px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); text-align:right; font-family:'DM Mono',monospace; }
   .err-txt { font-size:10px; color:var(--red); margin-top:4px; }
   .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:100; align-items:center; justify-content:center; }
   .overlay.open { display:flex; }
   .modal { background:var(--surface); border-radius:14px; border:1px solid var(--border); padding:22px; width:360px; max-width:94vw; max-height:90vh; overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,.15); }
   .modal-title { font-size:16px; font-weight:600; margin-bottom:14px; }
-  .tabs { display:flex; gap:4px; margin-bottom:12px; background:var(--bg); border-radius:8px; padding:3px; }
-  .tab { flex:1; font-size:12px; font-weight:500; padding:5px; border-radius:6px; border:none; background:transparent; color:var(--text2); cursor:pointer; font-family:'DM Sans',sans-serif; }
-  .tab.active { background:var(--surface); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.1); }
   .mrow { margin-bottom:10px; }
   .mrow label { display:block; font-size:11px; color:var(--text2); margin-bottom:4px; font-weight:500; }
   .mrow input { width:100%; font-size:13px; padding:7px 10px; border-radius:7px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; }
@@ -162,34 +158,16 @@
 <div class="overlay" id="modal">
   <div class="modal">
     <div class="modal-title">Lisa jõgi jälgimisele</div>
-    <div class="tabs">
-      <button class="tab active" id="tb-l" onclick="stab('l')">Automaatjaam</button>
-      <button class="tab" id="tb-m" onclick="stab('m')">Käsitsi</button>
-    </div>
-    <div id="tp-l">
-      <p style="font-size:11px;color:var(--text3);margin-bottom:8px;">Andmed uuenevad automaatselt Keskkonnaagentuuri mõõtejaamadest.</p>
-      <input class="ssrch" id="ssrch" type="text" placeholder="Otsi jõge või jaama..." oninput="filterSt()"/>
-      <div class="slist" id="slist"></div>
-      <div id="seli" style="font-size:11px;color:var(--text3);margin:6px 0;min-height:16px;"></div>
-      <div class="mgrid">
-        <div class="mrow"><label>Isiklik miinimum (cm)</label><input id="ppm" type="number" placeholder="(valikuline)"/></div>
-        <div class="mrow"><label>Min kajak (cm)</label><input id="pkm" type="number" placeholder="40"/></div>
-        <div class="mrow"><label>Min rafting (cm)</label><input id="prm" type="number" placeholder="60"/></div>
-        <div class="mrow"><label>Max ohutu (cm)</label><input id="pms" type="number" placeholder="150"/></div>
-        <div class="mrow"><label>Absoluutne max</label><input id="pam" type="number" placeholder="200"/></div>
-      </div>
-    </div>
-    <div id="tp-m" style="display:none">
-      <div class="mrow"><label>Jõe nimi</label><input id="mn" type="text" placeholder="Jägala"/></div>
-      <div class="mrow"><label>Asukoht</label><input id="ml" type="text" placeholder="Jägala-Jõesuu"/></div>
-      <div class="mrow"><label>Veetase (cm)</label><input id="mv" type="number" placeholder="80"/></div>
-      <div class="mgrid">
-        <div class="mrow"><label>Isiklik miinimum (cm)</label><input id="mpm" type="number" placeholder="(valikuline)"/></div>
-        <div class="mrow"><label>Min kajak (cm)</label><input id="mkm" type="number" placeholder="40"/></div>
-        <div class="mrow"><label>Min rafting (cm)</label><input id="mrm" type="number" placeholder="60"/></div>
-        <div class="mrow"><label>Max ohutu (cm)</label><input id="mms" type="number" placeholder="150"/></div>
-        <div class="mrow"><label>Absoluutne max</label><input id="mam" type="number" placeholder="200"/></div>
-      </div>
+    <p style="font-size:11px;color:var(--text3);margin-bottom:8px;">Andmed uuenevad automaatselt Keskkonnaagentuuri mõõtejaamadest.</p>
+    <input class="ssrch" id="ssrch" type="text" placeholder="Otsi jõge või jaama..." oninput="filterSt()"/>
+    <div class="slist" id="slist"></div>
+    <div id="seli" style="font-size:11px;color:var(--text3);margin:6px 0;min-height:16px;"></div>
+    <div class="mgrid">
+      <div class="mrow"><label>Isiklik miinimum (cm)</label><input id="ppm" type="number" placeholder="(valikuline)"/></div>
+      <div class="mrow"><label>Min kajak (cm)</label><input id="pkm" type="number" placeholder="40"/></div>
+      <div class="mrow"><label>Min rafting (cm)</label><input id="prm" type="number" placeholder="60"/></div>
+      <div class="mrow"><label>Max ohutu (cm)</label><input id="pms" type="number" placeholder="150"/></div>
+      <div class="mrow"><label>Absoluutne max</label><input id="pam" type="number" placeholder="200"/></div>
     </div>
     <div class="merr" id="merr"></div>
     <div class="mact">
@@ -314,7 +292,7 @@ for(const k in LV_RIVERS){
   LV_RIVERS_NORM[normLV(k)]=LV_RIVERS[k];
 }
 
-let rivers=[], liveData={}, allSt=[], filtSt=[], selSt=null, editId=null, atab='l', busy=false, lupd=null;
+let rivers=[], liveData={}, allSt=[], filtSt=[], selSt=null, editId=null, busy=false, lupd=null;
 let defaults=[]; // Sinu Sheetsist tulevad vaikimisi jõed
 let loigud=[]; // Jõgede lõigud
 let punktid=[]; // Lõikude punktid (veeskamine, laager, jne)
@@ -703,10 +681,8 @@ function renderCard(r){
     ${hasLoigud(r.jogi)?`<button class="vp-btn" style="margin-bottom:8px;width:100%;" onclick="openV('${(r.jogi||'').replace(/'/g,"\\'")}')">🗺️ Veepeale — vaata teekondi</button>`:''}
     ${r.isCache?`<div class="cache-tag">⏱ Vanad andmed (varuandmed)</div>`:''}
     <div class="card-foot">
-      <span class="foot-src"><span class="fdot ${r.isLive?'live':'man'}"></span>${r.isLive?'KA · ':'Käsitsi · '}${fmt(r.updated)}</span>
+      <span class="foot-src"><span class="fdot live"></span>KA · ${fmt(r.updated)}</span>
       <div class="foot-btns">
-        ${!r.isLive?`<input class="man-inp" type="number" id="mi-${r.id}" value="${r.level||0}" min="0"/>
-          <button class="ibtn" onclick="setMan('${r.id}')">OK</button>`:''}
         <button class="ibtn" onclick="tog('${r.id}')">${ed?'✕':'⚙'}</button>
         <button class="ibtn" onclick="del('${r.id}')">🗑</button>
       </div>
@@ -735,7 +711,6 @@ function render(){
   g.innerHTML=rivers.map(renderCard).join('');
 }
 
-function setMan(id){const v=parseInt(document.getElementById('mi-'+id).value,10);if(isNaN(v))return;rivers=rivers.map(r=>r.id===id?{...r,level:v,updated:new Date().toISOString()}:r);lsSave();render();}
 function tog(id){editId=editId===id?null:id;render();}
 function saveEd(id){
   const g=k=>parseInt(document.getElementById(k+id).value,10);
@@ -807,18 +782,7 @@ function pickStByIdx(idx){
   const el=document.getElementById('seli');
   if(el&&selSt)el.textContent=`✓ ${selSt.veekogu} / ${selSt.jaam} — ${selSt.level} cm`;
 }
-function pickSt(jaam){
-  selSt=allSt.find(s=>s.jaam===jaam);renderSt();
-  const el=document.getElementById('seli');
-  if(el&&selSt)el.textContent=`✓ ${selSt.veekogu} / ${selSt.jaam} — ${selSt.level} cm`;
-}
-function stab(t){
-  atab=t;
-  document.getElementById('tp-l').style.display=t==='l'?'block':'none';
-  document.getElementById('tp-m').style.display=t==='m'?'block':'none';
-  document.getElementById('tb-l').classList.toggle('active',t==='l');
-  document.getElementById('tb-m').classList.toggle('active',t==='m');
-}
+
 function openM(){
   selSt=null;
   document.getElementById('modal').classList.add('open');
@@ -833,34 +797,19 @@ function openM(){
 function closeM(){document.getElementById('modal').classList.remove('open');selSt=null;}
 function addR(){
   const err=document.getElementById('merr');err.style.display='none';
-  if(atab==='l'){
-    if(!selSt){err.textContent='Palun vali jaam nimekirjast (vajuta sellele).';err.style.display='block';return;}
-    const ppmVal=parseInt(document.getElementById('ppm').value);
-    rivers.push({id:String(Date.now()),jogi:selSt.veekogu,jaam:selSt.jaam,stJaam:selSt.jaam,isLive:true,
-      country:selSt.country||'EE',
-      level:selSt.level,kayakMin:parseInt(document.getElementById('pkm').value)||40,
-      raftMin:parseInt(document.getElementById('prm').value)||60,
-      maxSafe:parseInt(document.getElementById('pms').value)||150,
-      absMax:parseInt(document.getElementById('pam').value)||200,
-      personalMin:isNaN(ppmVal)?null:ppmVal,
-      delta24:selSt.delta24!=null?selSt.delta24:null,
-      waterT:selSt.waterT!=null?selSt.waterT:null,
-      airT:selSt.airT!=null?selSt.airT:null,
-      updated:lupd,err:null});
-  }else{
-    const name=document.getElementById('mn').value.trim();
-    if(!name){err.textContent='Palun sisesta nimi.';err.style.display='block';return;}
-    const mpmVal=parseInt(document.getElementById('mpm').value);
-    rivers.push({id:String(Date.now()),jogi:name,jaam:document.getElementById('ml').value.trim()||'—',
-      stJaam:null,isLive:false,level:parseInt(document.getElementById('mv').value)||50,
-      kayakMin:parseInt(document.getElementById('mkm').value)||40,
-      raftMin:parseInt(document.getElementById('mrm').value)||60,
-      maxSafe:parseInt(document.getElementById('mms').value)||150,
-      absMax:parseInt(document.getElementById('mam').value)||200,
-      personalMin:isNaN(mpmVal)?null:mpmVal,
-      delta24:null,waterT:null,airT:null,
-      updated:new Date().toISOString(),err:null});
-  }
+  if(!selSt){err.textContent='Palun vali jaam nimekirjast (vajuta sellele).';err.style.display='block';return;}
+  const ppmVal=parseInt(document.getElementById('ppm').value);
+  rivers.push({id:String(Date.now()),jogi:selSt.veekogu,jaam:selSt.jaam,stJaam:selSt.jaam,isLive:true,
+    country:selSt.country||'EE',
+    level:selSt.level,kayakMin:parseInt(document.getElementById('pkm').value)||40,
+    raftMin:parseInt(document.getElementById('prm').value)||60,
+    maxSafe:parseInt(document.getElementById('pms').value)||150,
+    absMax:parseInt(document.getElementById('pam').value)||200,
+    personalMin:isNaN(ppmVal)?null:ppmVal,
+    delta24:selSt.delta24!=null?selSt.delta24:null,
+    waterT:selSt.waterT!=null?selSt.waterT:null,
+    airT:selSt.airT!=null?selSt.airT:null,
+    updated:lupd,err:null});
   lsSave();closeM();render();
 }
 
@@ -1397,12 +1346,6 @@ function updateGps(pos, firstFix){
   }
   const btn=document.getElementById('gps-btn');
   if(btn)btn.innerHTML='🎯 Kesken minu peale';
-}
-
-// "Kesken minu peale" — suumib kaardi GPS asukohale
-function centerOnGps(){
-  if(!gpsMarker||!vMap)return;
-  vMap.setView(gpsMarker.getLatLng(), 15);
 }
 
 async function init(){
