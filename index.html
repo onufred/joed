@@ -1062,11 +1062,13 @@ function buildRivers(){
   }
   // 2) Lisa kasutaja enda lisatud jõed (need on lsLoad-st)
   const userRivers=lsLoad()||[];
-  // Filtreeri välja need, mis on tegelikult sinu defaults nimekirjast (vana versiooni jäänukid)
-  const defaultJaams=new Set(defaults.map(d=>(d.country==='LV'?d.jaam+' (LV)':d.jaam)));
+  // Filtreeri välja need, mis on tegelikult sinu defaults nimekirjas JA kuvatud (mitte kustutatud)
+  // Selleks vaatame, mis jaamad on hetkel newRivers-is (need on aktiivsed defaults)
+  const activeDefaultJaams=new Set(newRivers.filter(r=>r.isDefault).map(r=>r.stJaam));
   for(const r of userRivers){
     if(r.isDefault)continue;
-    if(r.isLive&&defaultJaams.has(r.stJaam))continue;
+    // Jäta vahele ainult siis, kui sama jaam on juba kuvatud defaults-st (vältida duplikaate)
+    if(r.isLive&&activeDefaultJaams.has(r.stJaam))continue;
     // Värskenda live andmed
     if(r.isLive&&r.stJaam){
       const m=findSt(r.stJaam);
