@@ -7,6 +7,44 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script type="module">
+  // Firebase imports
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+  import { getFirestore, collection, query, where, orderBy, limit, addDoc, deleteDoc, doc, serverTimestamp, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyB1_RN4Z-fz5dL-VzlY_w4ESyBCIbHpZLI",
+    authDomain: "veeretked.firebaseapp.com",
+    projectId: "veeretked",
+    storageBucket: "veeretked.firebasestorage.app",
+    messagingSenderId: "818252951484",
+    appId: "1:818252951484:web:910538c9cec816691b05b9"
+  };
+
+  // Initialize
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const provider = new GoogleAuthProvider();
+  // Soovita kasutaja konto valikut iga kord (vältida vana sessiooni)
+  provider.setCustomParameters({ prompt: 'select_account' });
+
+  // Tee globaalselt kättesaadavaks (et tavalisest <script> osast saaks kasutada)
+  window.fb = {
+    auth, db, provider,
+    signInWithPopup, signOut, onAuthStateChanged,
+    collection, query, where, orderBy, limit,
+    addDoc, deleteDoc, doc, serverTimestamp, onSnapshot
+  };
+
+  // Vaata sisselogimise olekut
+  onAuthStateChanged(auth, (user) => {
+    if (typeof window.onAuthChange === 'function') {
+      window.onAuthChange(user);
+    }
+  });
+</script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -23,7 +61,16 @@
   .logo { font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; color: var(--accent); }
   .logo span { color: var(--text3); font-weight: 400; }
   .last-update { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; margin-top: 2px; }
-  .header-right { display: flex; gap: 8px; }
+  .header-right { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  /* Auth nupud / kasutaja chip */
+  #auth-area { position: relative; }
+  #user-chip { display:none; align-items:center; gap:7px; padding:4px 10px 4px 4px; border-radius:20px; background:var(--surface); border:1px solid var(--border); cursor:pointer; transition:background .15s; }
+  #user-chip:hover { background:var(--surface2); }
+  #user-photo { width:26px; height:26px; border-radius:50%; object-fit:cover; flex-shrink:0; }
+  #user-name { font-size:13px; font-weight:500; color:var(--text); white-space:nowrap; max-width:120px; overflow:hidden; text-overflow:ellipsis; }
+  #user-menu { position:absolute; top:calc(100% + 6px); right:0; min-width:200px; background:var(--surface); border:1px solid var(--border); border-radius:9px; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:50; overflow:hidden; }
+  .user-menu-item { display:block; width:100%; text-align:left; padding:11px 14px; font-size:13px; border:none; background:transparent; color:var(--text); cursor:pointer; font-family:'DM Sans',sans-serif; }
+  .user-menu-item:hover { background:var(--surface2); }
   .btn { font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; transition: all .15s; }
   .btn:hover { background: var(--surface2); }
   .btn:disabled { opacity: .4; cursor: default; }
@@ -187,6 +234,18 @@
     <button class="btn" onclick="resetDefaults()" title="Lähtesta vaikimisi nimekiri">🔄 Lähtesta</button>
     <button class="btn" onclick="exportSettings()">📤 Ekspordi</button>
     <button class="btn btn-primary" onclick="openM()">+ Lisa jõgi</button>
+    <div id="auth-area">
+      <button class="btn" id="login-btn" onclick="doLogin()">🔐 Logi sisse</button>
+      <div id="user-chip" style="display:none;" onclick="toggleUserMenu()" title="Klõpsa profiili menüü jaoks">
+        <img id="user-photo" src="" alt=""/>
+        <span id="user-name"></span>
+        <span style="color:var(--text3);font-size:11px;">▾</span>
+      </div>
+      <div id="user-menu" style="display:none;">
+        <div id="user-menu-email" style="padding:10px 14px; font-size:11px; color:var(--text3); border-bottom:1px solid var(--surface2); font-family:'DM Mono',monospace; word-break:break-all;"></div>
+        <button class="user-menu-item" onclick="doLogout()">🚪 Logi välja</button>
+      </div>
+    </div>
   </div>
 </header>
 <main>
@@ -1949,6 +2008,77 @@ function updateGpsInfo(){
   }
   panel.innerHTML=html;
 }
+
+// =============== AUTH (GOOGLE LOGIN) ===============
+
+let currentUser=null;
+
+async function doLogin(){
+  if(!window.fb){
+    alert('Firebase pole laetud. Proovi uuesti hetke pärast.');
+    return;
+  }
+  try{
+    const result=await window.fb.signInWithPopup(window.fb.auth, window.fb.provider);
+    // currentUser uuendatakse onAuthStateChanged kaudu
+  }catch(err){
+    if(err.code==='auth/popup-closed-by-user')return; // kasutaja sulges, OK
+    if(err.code==='auth/cancelled-popup-request')return;
+    console.error('Login viga:', err);
+    alert('Sisselogimine ebaõnnestus: '+(err.message||err.code));
+  }
+}
+
+async function doLogout(){
+  if(!window.fb)return;
+  try{
+    await window.fb.signOut(window.fb.auth);
+    document.getElementById('user-menu').style.display='none';
+  }catch(err){
+    console.error('Logout viga:', err);
+  }
+}
+
+function toggleUserMenu(){
+  const m=document.getElementById('user-menu');
+  if(!m)return;
+  m.style.display=m.style.display==='block'?'none':'block';
+}
+
+// Kuula kogu dokumendil klikke et menüü sulgeda välise klikiga
+document.addEventListener('click', (e)=>{
+  const menu=document.getElementById('user-menu');
+  const chip=document.getElementById('user-chip');
+  if(!menu||!chip)return;
+  if(menu.style.display==='block'&&!menu.contains(e.target)&&!chip.contains(e.target)){
+    menu.style.display='none';
+  }
+});
+
+// Globaalne callback Firebase'i moodulist
+window.onAuthChange=function(user){
+  currentUser=user;
+  const loginBtn=document.getElementById('login-btn');
+  const chip=document.getElementById('user-chip');
+  const photo=document.getElementById('user-photo');
+  const name=document.getElementById('user-name');
+  const emailEl=document.getElementById('user-menu-email');
+  if(user){
+    // Sisselogitud
+    if(loginBtn)loginBtn.style.display='none';
+    if(chip)chip.style.display='inline-flex';
+    if(photo)photo.src=user.photoURL||'';
+    // Eelistuse järgi: nimi enne, kui pole, siis e-mail
+    if(name)name.textContent=user.displayName||user.email||'Kasutaja';
+    if(emailEl)emailEl.textContent=user.email||'';
+  } else {
+    // Välja logitud
+    if(loginBtn)loginBtn.style.display='inline-block';
+    if(chip)chip.style.display='none';
+    const m=document.getElementById('user-menu');
+    if(m)m.style.display='none';
+  }
+};
 
 async function init(){
   // 1) Laadi vaikimisi nimekiri Sheetsist (jookseb paralleelselt veetasemete laadimisega)
