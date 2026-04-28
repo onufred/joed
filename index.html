@@ -84,6 +84,10 @@
   .gps-controls { position:absolute; top:10px; right:10px; z-index:1000; display:flex; flex-direction:column; gap:6px; }
   .gps-controls button { background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:8px 12px; font-size:12px; font-weight:500; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.15); font-family:'DM Sans',sans-serif; color:var(--text); white-space:nowrap; }
   .gps-controls button:hover { background:var(--surface2); }
+  .gps-info { position:absolute; bottom:10px; left:10px; right:10px; z-index:1000; background:rgba(255,255,255,0.96); border:1px solid var(--border); border-radius:8px; padding:8px 10px; box-shadow:0 2px 8px rgba(0,0,0,0.12); display:flex; gap:14px; justify-content:space-around; font-family:'DM Sans',sans-serif; backdrop-filter:blur(4px); }
+  .gpsi-item { text-align:center; flex:1; min-width:0; }
+  .gpsi-lbl { font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; margin-bottom:2px; white-space:nowrap; }
+  .gpsi-val { font-size:14px; font-weight:600; color:var(--text); font-family:'DM Mono',monospace; white-space:nowrap; }
   .leaflet-popup-content-wrapper { border-radius: 7px; }
   .leaflet-popup-content { font-family:'DM Sans',sans-serif; font-size:12px; margin:8px 12px; }
   .leaflet-popup-content b { font-size:13px; color:var(--text); }
@@ -302,6 +306,9 @@ let gpsWatchId=null; // GPS jälgimise ID
 let gpsMarker=null; // Sinine täpp kaardil
 let gpsCircle=null; // Täpsuse ring
 let gpsFollowing=false; // Kas kaart järgib kasutajat
+let gpsHistory=[]; // [{lat, lng, ts}, ...] viimased GPS punktid kiiruse arvutamiseks
+let gpsCurrentRoute=null; // Praeguse lõigu BRouter joone andmed [[lat,lng], ...] (km arvutamiseks)
+let gpsCurrentRouteTotalKm=0; // Joone kogupikkus (cache)
 const SK_DELETED='rv9_deleted'; // Kasutaja eemaldatud vaikimisi jõed (jaam-nimed)
 const SK_CUSTOMIZED='rv9_customized'; // Kasutaja muudetud jõed (jaam -> {kayakMin, raftMin, ...})
 
@@ -315,6 +322,39 @@ function parseCoords(s){
   const lng=parseFloat(parts[1].replace(',','.'));
   if(isNaN(lat)||isNaN(lng))return null;
   return [lat,lng];
+}
+
+// Haversine: kahe lat/lng punkti vaheline distants meetrites
+function haversine(a, b){
+  const R=6371000;
+  const toRad=d=>d*Math.PI/180;
+  const dLat=toRad(b[0]-a[0]);
+  const dLng=toRad(b[1]-a[1]);
+  const lat1=toRad(a[0]);
+  const lat2=toRad(b[0]);
+  const x=Math.sin(dLat/2)**2+Math.sin(dLng/2)**2*Math.cos(lat1)*Math.cos(lat2);
+  return 2*R*Math.asin(Math.sqrt(x));
+}
+
+// Leia joonel lähima punkti indeks etteantud asukohale
+function nearestRouteIdx(pos, route){
+  if(!route||route.length===0)return -1;
+  let bestIdx=0, bestDist=Infinity;
+  for(let i=0;i<route.length;i++){
+    const d=haversine(pos, route[i]);
+    if(d<bestDist){bestDist=d; bestIdx=i;}
+  }
+  return bestIdx;
+}
+
+// Arvuta joone pikkus alates indeksist kuni lõpuni (meetrites)
+function routeLengthFrom(route, fromIdx){
+  if(!route||fromIdx<0)return 0;
+  let total=0;
+  for(let i=fromIdx;i<route.length-1;i++){
+    total+=haversine(route[i], route[i+1]);
+  }
+  return total;
 }
 
 function lsLoad(){try{const r=localStorage.getItem(SK);if(r)return JSON.parse(r);}catch(e){}return null;}
@@ -1127,7 +1167,7 @@ function renderLoik(l){
     html+='</div>';
   }
   // Kaart (koos GPS nupuga)
-  html+='<div style="position:relative;"><div id="vmap"></div><div class="gps-controls"><button id="gps-btn" onclick="toggleGps()">📍 Mu asukoht</button></div></div>';
+  html+='<div style="position:relative;"><div id="vmap"></div><div class="gps-controls"><button id="gps-btn" onclick="toggleGps()">📍 Mu asukoht</button></div><div id="gps-info" class="gps-info" style="display:none;"></div></div>';
   // Kontaktinfo plokk (Veeretked.ee)
   html+=`<div class="vp-contact">
     <div class="vp-contact-title">🚣 Soovid sellele lõigule matka?</div>
@@ -1182,6 +1222,9 @@ function initLoikMap(l, myPunktid){
   // Reset GPS markerid (jälgimine jätkub, aga uue kaardi peale uued markerid)
   gpsMarker=null;
   gpsCircle=null;
+  // Reset joone andmed (uus lõik = uus joon)
+  gpsCurrentRoute=null;
+  gpsCurrentRouteTotalKm=0;
   const mapEl=document.getElementById('vmap');
   if(!mapEl)return;
   // Default center
@@ -1209,11 +1252,16 @@ function initLoikMap(l, myPunktid){
     // Proovime laadida BRouterist päris jõe joone (asünkr.)
     fetchRiverRoute(l.algus, l.lopp).then(latlngs=>{
       if(!latlngs||!vMap)return; // Modal kinni või ei õnnestunud
+      // Salvesta joone andmed GPS arvutuste jaoks
+      gpsCurrentRoute=latlngs;
+      gpsCurrentRouteTotalKm=routeLengthFrom(latlngs, 0)/1000;
       // Eemalda sirgjoon ja joonista päris jõe joon
       if(routeLine){vMap.removeLayer(routeLine);}
       L.polyline(latlngs, {color:'#2d5a3d', weight:4, opacity:0.85}).addTo(vMap);
       // Sobita kaart päris joonele
       try{vMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});}catch(e){}
+      // Kui GPS juba aktiivne, värskenda info
+      if(gpsMarker)updateGpsInfo();
     });
   }
 
@@ -1317,6 +1365,10 @@ function stopGps(){
   if(gpsMarker&&vMap){vMap.removeLayer(gpsMarker);gpsMarker=null;}
   if(gpsCircle&&vMap){vMap.removeLayer(gpsCircle);gpsCircle=null;}
   gpsFollowing=false;
+  gpsHistory=[];
+  // Peida info paneel
+  const panel=document.getElementById('gps-info');
+  if(panel)panel.style.display='none';
 }
 
 function updateGps(pos, firstFix){
@@ -1325,6 +1377,18 @@ function updateGps(pos, firstFix){
   const lng=pos.coords.longitude;
   const acc=pos.coords.accuracy||50;
   const latlng=[lat,lng];
+  const ts=pos.timestamp||Date.now();
+
+  // Salvesta ajalugu (kuni 30 viimast punkti, kiiruse arvutamiseks)
+  // Ainult kui täpsus on mõistlik (< 100 m) ja eelmisest > 5 m kaugusel
+  if(acc<100){
+    const last=gpsHistory[gpsHistory.length-1];
+    if(!last||haversine(latlng,[last.lat,last.lng])>5){
+      gpsHistory.push({lat,lng,ts,acc});
+      if(gpsHistory.length>30)gpsHistory.shift();
+    }
+  }
+
   // Marker
   if(!gpsMarker){
     gpsMarker=L.marker(latlng, {icon:makeGpsIcon(), zIndexOffset:1000}).addTo(vMap);
@@ -1346,6 +1410,68 @@ function updateGps(pos, firstFix){
   }
   const btn=document.getElementById('gps-btn');
   if(btn)btn.innerHTML='🎯 Kesken minu peale';
+
+  // Värskenda info paneeli
+  updateGpsInfo();
+}
+
+// Värskenda GPS info paneeli (distants, kiirus, aeg)
+function updateGpsInfo(){
+  const panel=document.getElementById('gps-info');
+  if(!panel)return;
+  if(!gpsMarker){
+    panel.style.display='none';
+    return;
+  }
+  const myPos=[gpsMarker.getLatLng().lat, gpsMarker.getLatLng().lng];
+  // Keskmine kiirus viimaste GPS punktide järgi
+  let avgKmh=null, totalKm=0, totalSec=0;
+  if(gpsHistory.length>=2){
+    for(let i=1;i<gpsHistory.length;i++){
+      const a=gpsHistory[i-1], b=gpsHistory[i];
+      totalKm+=haversine([a.lat,a.lng],[b.lat,b.lng])/1000;
+      totalSec+=(b.ts-a.ts)/1000;
+    }
+    if(totalSec>10&&totalKm>0.01){ // vähemalt 10s ja 10m liikumist
+      avgKmh=(totalKm/totalSec)*3600;
+    }
+  }
+  // Distants joone lõpuni (mööda jõge)
+  let leftKm=null;
+  if(gpsCurrentRoute&&gpsCurrentRoute.length>1){
+    const idx=nearestRouteIdx(myPos, gpsCurrentRoute);
+    if(idx>=0){
+      const meters=routeLengthFrom(gpsCurrentRoute, idx);
+      leftKm=meters/1000;
+    }
+  }
+  // Aeg lõpuni
+  let etaText='—';
+  if(leftKm!=null&&avgKmh!=null&&avgKmh>0.5){
+    const hours=leftKm/avgKmh;
+    const totalMin=Math.round(hours*60);
+    if(totalMin<60)etaText=totalMin+' min';
+    else etaText=Math.floor(totalMin/60)+'h '+(totalMin%60)+'min';
+  } else if(leftKm!=null){
+    etaText='liiga vähe andmeid';
+  }
+
+  // Kuva
+  panel.style.display='flex';
+  let html='';
+  if(leftKm!=null){
+    html+=`<div class="gpsi-item"><div class="gpsi-lbl">📏 Lõpuni</div><div class="gpsi-val">${leftKm.toFixed(1)} km</div></div>`;
+  }
+  if(avgKmh!=null){
+    html+=`<div class="gpsi-item"><div class="gpsi-lbl">🚣 Kiirus</div><div class="gpsi-val">${avgKmh.toFixed(1)} km/h</div></div>`;
+  }
+  if(leftKm!=null){
+    html+=`<div class="gpsi-item"><div class="gpsi-lbl">⏱ ETA</div><div class="gpsi-val">${etaText}</div></div>`;
+  }
+  if(!html){
+    html=`<div class="gpsi-item"><div class="gpsi-lbl">GPS</div><div class="gpsi-val">Kogun andmeid...</div></div>`;
+  }
+  panel.innerHTML=html;
 }
 
 async function init(){
