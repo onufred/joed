@@ -121,6 +121,11 @@
   .g-axis { position:relative; height:14px; margin-top:2px; }
   .g-axis-lbl { position:absolute; font-size:9px; color:var(--text3); font-family:'DM Mono',monospace; transform:translateX(-50%); }
   .g-note { background:var(--green-bg); border:1px solid #a7d9bc; border-radius:8px; padding:10px 12px; font-size:12px; color:var(--text); margin-top:14px; }
+  .g-water { background:var(--bg); border:1px solid var(--surface2); border-radius:6px; padding:8px; }
+  .g-water-axis { position:relative; height:16px; margin-top:4px; font-size:10px; color:var(--text3); font-family:'DM Mono',monospace; }
+  .g-water-axis span { position:absolute; }
+  .g-water-info { display:flex; flex-wrap:wrap; gap:14px; margin-top:8px; font-size:11px; color:var(--text2); }
+  .g-water-info b { color:var(--text); font-weight:600; }
   .leaflet-popup-content-wrapper { border-radius: 7px; }
   .leaflet-popup-content { font-family:'DM Sans',sans-serif; font-size:12px; margin:8px 12px; }
   .leaflet-popup-content b { font-size:13px; color:var(--text); }
@@ -261,6 +266,8 @@ const GVIZ_CACHE_EE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq
 const GVIZ_CACHE_LV='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=296812902';
 const GVIZ_LOIGUD='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=1946905220';
 const GVIZ_PUNKTID='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=1674967644';
+const GVIZ_HIST_EE='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=25755121';
+const GVIZ_HIST_LV='https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&gid=873015521';
 
 // Läti jaamade -> jõgede/veekogude kaardistus (jaama nime järgi, normaliseeritud)
 // Allikas: LVĢMC PRIS süsteem, LVĢMC dokumendid, geograafia
@@ -655,6 +662,7 @@ async function loadCSV(){
       const veekoguDisplay=river?(river+' / '+name):name;
       const fakeJaam=name+' (LV)';
       const obj={level:lvl, jaam:fakeJaam, veekogu:veekoguDisplay, country:'LV',
+        lvSid:sid,
         delta24:delta24!=null?Math.round(delta24*10)/10:null,
         waterT:waterT!=null?Math.round(waterT*10)/10:null,
         airT:null,
@@ -1097,6 +1105,7 @@ function buildRivers(){
       waterT:m?m.waterT:null,
       airT:m?m.airT:null,
       isCache:m?!!m.isCache:false,
+      lvSid:m?m.lvSid:null,
       updated:lupd,
       err:m?null:'Jaama ei leitud'
     });
@@ -1113,7 +1122,7 @@ function buildRivers(){
     // Värskenda live andmed
     if(r.isLive&&r.stJaam){
       const m=findSt(r.stJaam);
-      if(m){r.level=m.level;r.delta24=m.delta24;r.waterT=m.waterT;r.airT=m.airT;r.isCache=!!m.isCache;r.country=m.country||r.country;r.updated=lupd;r.err=null;}
+      if(m){r.level=m.level;r.delta24=m.delta24;r.waterT=m.waterT;r.airT=m.airT;r.isCache=!!m.isCache;r.lvSid=m.lvSid||r.lvSid;r.country=m.country||r.country;r.updated=lupd;r.err=null;}
       else r.err='Jaama ei leitud';
     }
     newRivers.push({...r,id:String(r.id),err:r.err||null});
@@ -1301,103 +1310,273 @@ function renderWeather(w){
 
 // =============== GRAAFIK MODAL ===============
 
-function openGraph(jogi, lat, lng){
+async function openGraph(jogi, lat, lng){
   document.getElementById('g-title').textContent='📊 '+jogi;
-  document.getElementById('g-sub').textContent='Ilm ja sajud — 48h prognoos';
+  document.getElementById('g-sub').textContent='Veetase, ilm ja sajud';
   document.getElementById('g-content').innerHTML='⏳ Laen andmeid...';
   document.getElementById('gmodal').classList.add('open');
-  if(lat&&lng){
-    fetchWeather(lat, lng).then(w=>renderGraph(w));
-  } else {
-    document.getElementById('g-content').innerHTML='Lõigule pole määratud koordinaate';
+  // Leia jõgi rivers-ist (ajaloo jaoks)
+  const r=rivers.find(rr=>rr.jogi===jogi);
+  // Lae kõik vajalik paralleelselt
+  const [w, hist]=await Promise.all([
+    (lat&&lng)?fetchWeather(lat, lng):Promise.resolve(null),
+    fetchHistory()
+  ]);
+  // Leia ajalugu sellele jõele
+  let history=[];
+  if(r){
+    history=getHistoryFor(r);
   }
+  renderGraph(w, history, r);
 }
 
 function closeGraph(){
   document.getElementById('gmodal').classList.remove('open');
 }
 
-function renderGraph(w){
+function renderGraph(w, history, river){
   const el=document.getElementById('g-content');
   if(!el)return;
-  if(!w||!w.hourly||!w.hourly.time){
-    el.innerHTML='⚠️ Ilmaprognoosi ei õnnestunud laadida';
-    return;
-  }
-  // Esimesed 48 tundi
-  const hours=Math.min(48, w.hourly.time.length);
-  const times=w.hourly.time.slice(0,hours);
-  const temps=w.hourly.temperature_2m.slice(0,hours);
-  const precs=w.hourly.precipitation.slice(0,hours);
-  const winds=w.hourly.wind_speed_10m.slice(0,hours);
-  // Maksimum väärtused skaala jaoks
-  const maxPrec=Math.max(2, ...precs);
-  const maxTemp=Math.max(...temps);
-  const minTemp=Math.min(...temps);
-  const tempRange=Math.max(5, maxTemp-minTemp);
-  const maxWind=Math.max(5, ...winds);
+  let html='';
 
-  // Sajude graafik (tulpdiagramm)
-  let precHtml='<div class="g-section"><div class="g-section-title">🌧️ Sajud (mm/h) — kogusumma 48h: <b>'+precs.reduce((a,b)=>a+b,0).toFixed(1)+' mm</b></div><div class="g-bars">';
-  for(let i=0;i<hours;i++){
-    const h=Math.max(2, (precs[i]/maxPrec)*60);
-    const d=new Date(times[i]);
-    const isNewDay=i>0&&d.getDate()!==new Date(times[i-1]).getDate();
-    const cls=isNewDay?'g-bar new-day':'g-bar';
-    const color=precs[i]>5?'#dc2626':(precs[i]>1?'#3b82f6':'#a3c4ee');
-    precHtml+=`<div class="${cls}" title="${d.getHours()}:00 — ${precs[i].toFixed(1)} mm"><div class="g-bar-fill" style="height:${h}px;background:${color};"></div></div>`;
+  // 1) Veetaseme ajaloo graafik
+  if(history&&history.length>=2){
+    const last=history[history.length-1];
+    const first=history[0];
+    const days=Math.round((last.ts-first.ts)/(24*3600*1000));
+    const minLvl=Math.min(...history.map(h=>h.lvl));
+    const maxLvl=Math.max(...history.map(h=>h.lvl));
+    const range=Math.max(5, maxLvl-minLvl);
+    const w0=600, h0=120;
+    let path='', dots='';
+    for(let i=0;i<history.length;i++){
+      const x=(i/(history.length-1||1))*w0;
+      const y=h0-((history[i].lvl-minLvl)/range)*(h0-20)-10;
+      path+=(i===0?'M':' L')+x.toFixed(1)+','+y.toFixed(1);
+      // Punkt iga 5. näit
+      if(i%Math.max(1, Math.floor(history.length/15))===0||i===history.length-1){
+        dots+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="#2d5a3d"/>`;
+      }
+    }
+    // Visuaalsed sõlmed: praegune tase, min/max
+    const trend=last.lvl-first.lvl;
+    const trendIcon=trend>2?'📈':(trend<-2?'📉':'➡️');
+    const trendText=trend>0?`+${trend} cm`:`${trend} cm`;
+    html+=`<div class="g-section">
+      <div class="g-section-title">📈 Veetase — viimased ${days} päeva ${trendIcon} <span style="color:${trend>0?'#1a6b4a':(trend<0?'#9a4e00':'#6b6660')};">${trendText}</span></div>
+      <div class="g-water">
+        <svg viewBox="0 0 ${w0} ${h0}" preserveAspectRatio="none" style="width:100%;height:120px;">
+          <path d="${path}" stroke="#2d5a3d" stroke-width="2" fill="none"/>
+          ${dots}
+        </svg>
+        <div class="g-water-axis">
+          <span style="left:0;">${new Date(first.ts).toLocaleDateString('et-EE',{day:'numeric',month:'short'})}</span>
+          <span style="left:50%;transform:translateX(-50%);">${new Date(history[Math.floor(history.length/2)].ts).toLocaleDateString('et-EE',{day:'numeric',month:'short'})}</span>
+          <span style="right:0;">${new Date(last.ts).toLocaleDateString('et-EE',{day:'numeric',month:'short'})}</span>
+        </div>
+      </div>
+      <div class="g-water-info">
+        <span><b>Praegu:</b> ${last.lvl} cm</span>
+        <span><b>Madalaim:</b> ${minLvl} cm</span>
+        <span><b>Kõrgeim:</b> ${maxLvl} cm</span>
+        <span><b>Mõõdetud:</b> ${history.length} korda</span>
+      </div>
+    </div>`;
+  } else if(history&&history.length===1){
+    html+=`<div class="g-section">
+      <div class="g-section-title">📈 Veetase</div>
+      <div class="g-note">Ajalugu kogume alates eelmisest tunnist — graafiku jaoks vaja vähemalt 2 mõõtmist. Tule mõne tunni pärast tagasi!</div>
+    </div>`;
+  } else {
+    html+=`<div class="g-section">
+      <div class="g-section-title">📈 Veetase</div>
+      <div class="g-note">Sellele jaamale pole veel ajalugu kogutud või jaama ajalugu pole kättesaadav. Kogume seda iga tund — peagi tekib graafik.</div>
+    </div>`;
   }
-  precHtml+='</div><div class="g-axis">';
-  for(let i=0;i<hours;i+=6){
-    const d=new Date(times[i]);
-    const lbl=d.getHours()===0?(['P','E','T','K','N','R','L'][d.getDay()]):d.getHours()+'h';
-    precHtml+=`<span class="g-axis-lbl" style="left:${(i/hours)*100}%;">${lbl}</span>`;
+
+  // 2) Ilmaprognoos: 48h sajud
+  if(w&&w.hourly&&w.hourly.time){
+    const hours=Math.min(48, w.hourly.time.length);
+    const times=w.hourly.time.slice(0,hours);
+    const temps=w.hourly.temperature_2m.slice(0,hours);
+    const precs=w.hourly.precipitation.slice(0,hours);
+    const winds=w.hourly.wind_speed_10m.slice(0,hours);
+    const maxPrec=Math.max(2, ...precs);
+    const maxTemp=Math.max(...temps);
+    const minTemp=Math.min(...temps);
+    const tempRange=Math.max(5, maxTemp-minTemp);
+    const maxWind=Math.max(5, ...winds);
+
+    // Sajude graafik
+    let precHtml='<div class="g-section"><div class="g-section-title">🌧️ Sajud (mm/h) — 48h kogusumma: <b>'+precs.reduce((a,b)=>a+b,0).toFixed(1)+' mm</b></div><div class="g-bars">';
+    for(let i=0;i<hours;i++){
+      const h=Math.max(2, (precs[i]/maxPrec)*60);
+      const d=new Date(times[i]);
+      const isNewDay=i>0&&d.getDate()!==new Date(times[i-1]).getDate();
+      const cls=isNewDay?'g-bar new-day':'g-bar';
+      const color=precs[i]>5?'#dc2626':(precs[i]>1?'#3b82f6':'#a3c4ee');
+      precHtml+=`<div class="${cls}" title="${d.getHours()}:00 — ${precs[i].toFixed(1)} mm"><div class="g-bar-fill" style="height:${h}px;background:${color};"></div></div>`;
+    }
+    precHtml+='</div><div class="g-axis">';
+    for(let i=0;i<hours;i+=6){
+      const d=new Date(times[i]);
+      const lbl=d.getHours()===0?(['P','E','T','K','N','R','L'][d.getDay()]):d.getHours()+'h';
+      precHtml+=`<span class="g-axis-lbl" style="left:${(i/hours)*100}%;">${lbl}</span>`;
+    }
+    precHtml+='</div></div>';
+    html+=precHtml;
+
+    // Temperatuur
+    let tempHtml='<div class="g-section"><div class="g-section-title">🌡️ Temperatuur (°C)</div><div class="g-line">';
+    const w0=600, h0=80;
+    let path='';
+    for(let i=0;i<hours;i++){
+      const x=(i/(hours-1))*w0;
+      const y=h0-((temps[i]-minTemp)/tempRange)*(h0-10)-5;
+      path+=(i===0?'M':' L')+x.toFixed(1)+','+y.toFixed(1);
+    }
+    tempHtml+=`<svg viewBox="0 0 ${w0} ${h0}" preserveAspectRatio="none" style="width:100%;height:80px;">
+      <path d="${path}" stroke="#d97706" stroke-width="2" fill="none"/>
+    </svg></div>
+    <div class="g-axis">
+      <span class="g-axis-lbl" style="left:0;">${Math.round(temps[0])}°</span>
+      <span class="g-axis-lbl" style="left:50%;">${Math.round(temps[Math.floor(hours/2)])}°</span>
+      <span class="g-axis-lbl" style="left:100%;">${Math.round(temps[hours-1])}°</span>
+    </div>
+    <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:2px;">Vahemik: ${Math.round(minTemp)}° kuni ${Math.round(maxTemp)}°</div>
+    </div>`;
+    html+=tempHtml;
+
+    // Tuul
+    let windHtml='<div class="g-section"><div class="g-section-title">💨 Tuul (m/s)</div><div class="g-bars">';
+    for(let i=0;i<hours;i++){
+      const h=Math.max(2, (winds[i]/maxWind)*60);
+      const d=new Date(times[i]);
+      const dir=w.hourly.wind_direction_10m?w.hourly.wind_direction_10m[i]:0;
+      const color=winds[i]>=10?'#dc2626':(winds[i]>=6?'#d97706':'#5a8a73');
+      const dirText=windDirText(dir);
+      windHtml+=`<div class="g-bar" title="${d.getHours()}:00 — ${winds[i].toFixed(1)} m/s ${dirText}"><div class="g-bar-fill" style="height:${h}px;background:${color};"></div></div>`;
+    }
+    windHtml+='</div></div>';
+    html+=windHtml;
   }
-  precHtml+='</div></div>';
 
-  // Temperatuuri graafik (joon)
-  let tempHtml='<div class="g-section"><div class="g-section-title">🌡️ Temperatuur (°C)</div><div class="g-line">';
-  // SVG joon
-  const w0=600, h0=80;
-  let path='';
-  for(let i=0;i<hours;i++){
-    const x=(i/(hours-1))*w0;
-    const y=h0-((temps[i]-minTemp)/tempRange)*(h0-10)-5;
-    path+=(i===0?'M':' L')+x.toFixed(1)+','+y.toFixed(1);
-  }
-  tempHtml+=`<svg viewBox="0 0 ${w0} ${h0}" preserveAspectRatio="none" style="width:100%;height:80px;">
-    <path d="${path}" stroke="#d97706" stroke-width="2" fill="none"/>
-  </svg></div>
-  <div class="g-axis">
-    <span class="g-axis-lbl" style="left:0;">${Math.round(temps[0])}°</span>
-    <span class="g-axis-lbl" style="left:50%;">${Math.round(temps[Math.floor(hours/2)])}°</span>
-    <span class="g-axis-lbl" style="left:100%;">${Math.round(temps[hours-1])}°</span>
-  </div>
-  <div style="font-size:10px;color:var(--text3);text-align:right;margin-top:2px;">Vahemik: ${Math.round(minTemp)}° kuni ${Math.round(maxTemp)}°</div>
-  </div>`;
-
-  // Tuule graafik (tulpdiagramm)
-  let windHtml='<div class="g-section"><div class="g-section-title">💨 Tuul (m/s)</div><div class="g-bars">';
-  for(let i=0;i<hours;i++){
-    const h=Math.max(2, (winds[i]/maxWind)*60);
-    const d=new Date(times[i]);
-    const dir=w.hourly.wind_direction_10m?w.hourly.wind_direction_10m[i]:0;
-    const color=winds[i]>=10?'#dc2626':(winds[i]>=6?'#d97706':'#5a8a73');
-    const dirText=windDirText(dir);
-    windHtml+=`<div class="g-bar" title="${d.getHours()}:00 — ${winds[i].toFixed(1)} m/s ${dirText}"><div class="g-bar-fill" style="height:${h}px;background:${color};"></div></div>`;
-  }
-  windHtml+='</div></div>';
-
-  // Veetase märkus (kuna ajalugu pole veel)
-  const waterNote='<div class="g-note">📈 <b>Veetaseme ajalugu</b> tuleb varsti! Praegu kogume andmeid taustal — pärast paari nädalat näeme siin reaalseid trende.</div>';
-
-  el.innerHTML=precHtml+tempHtml+windHtml+waterNote;
+  el.innerHTML=html||'⚠️ Andmeid ei õnnestunud laadida';
 }
 // Initialize Leaflet map
 // Cache jõejoonte jaoks (et ei tõmmataks iga avamise korral uuesti)
 const routeCache={};
 // Cache ilmaprognoosi jaoks (15 min kehtivus)
 const weatherCache={};
+// Cache veetaseme ajaloo jaoks (jaama nime/sid järgi)
+let historyCacheEE=null, historyCacheLV=null, historyLoadedTs=0;
+
+// Lae veetaseme ajalugu (Cache_EE või Cache_LV) - jaamapõhiselt grupp
+async function fetchHistory(){
+  // Cache 5 min kehtivusega
+  if(historyCacheEE&&historyCacheLV&&(Date.now()-historyLoadedTs)<5*60*1000){
+    return {ee:historyCacheEE, lv:historyCacheLV};
+  }
+  const ee={}, lv={};
+  // Eesti
+  try{
+    const t=await fetchGvizJSON(GVIZ_HIST_EE);
+    let aIdx=-1, jIdx=-1, lIdx=-1, wIdx=-1;
+    if(t.cols){
+      for(let i=0;i<t.cols.length;i++){
+        const lbl=((t.cols[i].label||'')+' '+(t.cols[i].id||'')).toLowerCase();
+        if(aIdx<0&&lbl.includes('aeg'))aIdx=i;
+        else if(jIdx<0&&lbl.includes('jaam'))jIdx=i;
+        else if(lIdx<0&&lbl.includes('veetase'))lIdx=i;
+        else if(wIdx<0&&lbl.includes('veetemp'))wIdx=i;
+      }
+    }
+    if(aIdx<0)aIdx=0; if(jIdx<0)jIdx=1; if(lIdx<0)lIdx=2; if(wIdx<0)wIdx=3;
+    for(const row of (t.rows||[])){
+      const c=row.c;if(!c)continue;
+      const aRaw=c[aIdx]?c[aIdx].v:null;
+      const jaam=(c[jIdx]&&c[jIdx].v!=null)?String(c[jIdx].v).trim():'';
+      const lvl=c[lIdx]?(typeof c[lIdx].v==='number'?c[lIdx].v:parseFloat(String(c[lIdx].v).replace(',','.'))):null;
+      if(!jaam||lvl==null||isNaN(lvl))continue;
+      // Aeg: gviz tagastab Date objekti või string "Date(2026,3,28,12,36,40)" formaadis
+      let ts=0;
+      if(aRaw){
+        const m=String(aRaw).match(/Date\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/);
+        if(m){
+          // gviz: kuu on 0-indekseeritud!
+          ts=new Date(+m[1], +m[2], +m[3], +m[4], +m[5], +m[6]).getTime();
+        } else {
+          ts=Date.parse(String(aRaw));
+        }
+      }
+      if(!ts||isNaN(ts))continue;
+      if(!ee[jaam])ee[jaam]=[];
+      ee[jaam].push({ts, lvl:Math.round(lvl)});
+    }
+  }catch(e){console.warn('Eesti ajaloo laadimine ebaõnnestus:',e);}
+
+  // Läti
+  try{
+    const t=await fetchGvizJSON(GVIZ_HIST_LV);
+    let aIdx=-1, sIdx=-1, lIdx=-1, wIdx=-1;
+    if(t.cols){
+      for(let i=0;i<t.cols.length;i++){
+        const lbl=((t.cols[i].label||'')+' '+(t.cols[i].id||'')).toLowerCase();
+        if(aIdx<0&&lbl.includes('aeg'))aIdx=i;
+        else if(sIdx<0&&(lbl.includes('station')||lbl.includes('sid')))sIdx=i;
+        else if(lIdx<0&&lbl.includes('veetase'))lIdx=i;
+        else if(wIdx<0&&lbl.includes('veetemp'))wIdx=i;
+      }
+    }
+    if(aIdx<0)aIdx=0; if(sIdx<0)sIdx=1; if(lIdx<0)lIdx=2; if(wIdx<0)wIdx=3;
+    for(const row of (t.rows||[])){
+      const c=row.c;if(!c)continue;
+      const aRaw=c[aIdx]?c[aIdx].v:null;
+      const sid=(c[sIdx]&&c[sIdx].v!=null)?String(c[sIdx].v).trim():'';
+      const lvl=c[lIdx]?(typeof c[lIdx].v==='number'?c[lIdx].v:parseFloat(String(c[lIdx].v).replace(',','.'))):null;
+      if(!sid||lvl==null||isNaN(lvl))continue;
+      let ts=0;
+      if(aRaw){
+        const m=String(aRaw).match(/Date\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/);
+        if(m){
+          ts=new Date(+m[1], +m[2], +m[3], +m[4], +m[5], +m[6]).getTime();
+        } else {
+          ts=Date.parse(String(aRaw));
+        }
+      }
+      if(!ts||isNaN(ts))continue;
+      if(!lv[sid])lv[sid]=[];
+      lv[sid].push({ts, lvl:Math.round(lvl)});
+    }
+  }catch(e){console.warn('Läti ajaloo laadimine ebaõnnestus:',e);}
+
+  // Sorteeri kõik aja järgi
+  for(const k in ee)ee[k].sort((a,b)=>a.ts-b.ts);
+  for(const k in lv)lv[k].sort((a,b)=>a.ts-b.ts);
+
+  historyCacheEE=ee;
+  historyCacheLV=lv;
+  historyLoadedTs=Date.now();
+  return {ee, lv};
+}
+
+// Leia ajaloo andmed jõe jaoks - kõigepealt vaata jaama nime
+function getHistoryFor(river){
+  if(!river)return [];
+  if(!historyCacheEE&&!historyCacheLV)return [];
+  // Eesti: võti on "Jaam"
+  if(river.country==='EE'&&historyCacheEE&&river.stJaam){
+    return historyCacheEE[river.stJaam]||[];
+  }
+  // Läti: võti on station_id - peame leidma. Lihtsuse mõttes proovime nime järgi.
+  // Aga meil pole otse sid-i river objektis. Vaatame kõiki ajalugu, kus jaama nimi sobib.
+  // Tegelikult Cache_LV'st ei loe me nime - teeme nii: Latvia_Stacijas annab sid->name kaardistuse,
+  // aga see on ainult laadimise ajal. Lihtsuse mõttes lisame riveri objekti laadimise ajal sid välja.
+  if(river.country==='LV'&&historyCacheLV&&river.lvSid){
+    return historyCacheLV[river.lvSid]||[];
+  }
+  return [];
+}
 
 // Lae ilmaprognoos (Open-Meteo, tasuta, ilma võtmeta)
 async function fetchWeather(lat, lng){
