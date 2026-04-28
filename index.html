@@ -1190,6 +1190,32 @@ function renderLoik(l){
 }
 
 // Initialize Leaflet map
+// Cache jõejoonte jaoks (et ei tõmmataks iga avamise korral uuesti)
+const routeCache={};
+
+// Lae päris jõejoon BRouter API kaudu
+async function fetchRiverRoute(start, end){
+  // start ja end on [lat, lng] kujul, BRouter tahab "lng,lat|lng,lat"
+  const cacheKey=`${start[0]},${start[1]}-${end[0]},${end[1]}`;
+  if(routeCache[cacheKey])return routeCache[cacheKey];
+  const lonlats=`${start[1]},${start[0]}|${end[1]},${end[0]}`;
+  const url=`https://brouter.de/brouter?lonlats=${lonlats}&profile=river&alternativeidx=0&format=geojson`;
+  try{
+    const resp=await fetch(url);
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const geo=await resp.json();
+    if(!geo.features||!geo.features[0]||!geo.features[0].geometry)throw new Error('Vale GeoJSON');
+    const coords=geo.features[0].geometry.coordinates;
+    // BRouter tagastab [lng, lat], Leaflet vajab [lat, lng]
+    const latlngs=coords.map(c=>[c[1],c[0]]);
+    routeCache[cacheKey]=latlngs;
+    return latlngs;
+  }catch(e){
+    console.warn('BRouter ebaõnnestus:',e);
+    return null;
+  }
+}
+
 function initLoikMap(l, myPunktid){
   if(vMap){
     vMap.remove();
@@ -1202,18 +1228,32 @@ function initLoikMap(l, myPunktid){
   if(l.algus)center=l.algus;
   vMap=L.map('vmap').setView(center, 11);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap',
+    attribution: '© OpenStreetMap | Marsruut: BRouter',
     maxZoom: 18
   }).addTo(vMap);
 
+  let routeLine=null;
+
   // Joonista lõigu joon (algus → lõpp)
   if(l.algus&&l.lopp){
-    L.polyline([l.algus, l.lopp], {color:'#2d5a3d', weight:4, opacity:0.7}).addTo(vMap);
+    // Esmalt sirgjoon (vaheaegne, kuni BRouter laeb)
+    routeLine=L.polyline([l.algus, l.lopp], {color:'#2d5a3d', weight:3, opacity:0.4, dashArray:'8,6'}).addTo(vMap);
+
     // Markerid algus ja lõpp
     L.marker(l.algus, {icon:makeMapIcon('🅰️', '#2d5a3d')}).addTo(vMap)
       .bindPopup(`<b>Algus</b><br>${l.nimi||''}`);
     L.marker(l.lopp, {icon:makeMapIcon('🅱️', '#8b1a1a')}).addTo(vMap)
       .bindPopup(`<b>Lõpp</b><br>${l.nimi||''}`);
+
+    // Proovime laadida BRouterist päris jõe joone (asünkr.)
+    fetchRiverRoute(l.algus, l.lopp).then(latlngs=>{
+      if(!latlngs||!vMap)return; // Modal kinni või ei õnnestunud
+      // Eemalda sirgjoon ja joonista päris jõe joon
+      if(routeLine){vMap.removeLayer(routeLine);}
+      L.polyline(latlngs, {color:'#2d5a3d', weight:4, opacity:0.85}).addTo(vMap);
+      // Sobita kaart päris joonele
+      try{vMap.fitBounds(L.latLngBounds(latlngs), {padding:[30,30]});}catch(e){}
+    });
   }
 
   // Markerid punktidele
@@ -1239,7 +1279,7 @@ function initLoikMap(l, myPunktid){
     marker.bindPopup(popup);
   }
 
-  // Sobita kaart kõigi punktide järgi
+  // Sobita kaart kõigi punktide järgi (hiljem BRouter joon võib seda muuta)
   if(allPoints.length>0){
     const bounds=L.latLngBounds(allPoints);
     vMap.fitBounds(bounds, {padding:[30,30]});
