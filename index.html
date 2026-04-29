@@ -1654,13 +1654,6 @@ async function fetchHistory(){
       }
     }
     if(aIdx<0)aIdx=0; if(jIdx<0)jIdx=1; if(lIdx<0)lIdx=2; if(wIdx<0)wIdx=3;
-    // DEBUG: vaata mis veerud ja esimene rida
-    console.log('Ajalugu_EE veerud:', (t.cols||[]).map((c,i)=>i+': '+(c.label||c.id||'')+' (type='+(c.type||'?')+')').join(' | '));
-    if(t.rows&&t.rows.length>0){
-      const c0=t.rows[0].c;
-      console.log('Ajalugu_EE esimene rida raw:', (c0||[]).map((cc,j)=>j+'='+(cc&&cc.v!==undefined?JSON.stringify(cc.v):'∅')).join(' | '));
-    }
-    let parsedCount=0;
     for(const row of (t.rows||[])){
       const c=row.c;if(!c)continue;
       const aRaw=c[aIdx]?c[aIdx].v:null;
@@ -1671,9 +1664,7 @@ async function fetchHistory(){
       if(!ts||isNaN(ts))continue;
       if(!ee[jaam])ee[jaam]=[];
       ee[jaam].push({ts, lvl:Math.round(lvl)});
-      parsedCount++;
     }
-    console.log('Ajalugu_EE: parsitud '+parsedCount+' rida, '+Object.keys(ee).length+' jaama');
   }catch(e){console.warn('Eesti ajaloo laadimine ebaõnnestus:',e);}
 
   // Läti
@@ -1690,12 +1681,6 @@ async function fetchHistory(){
       }
     }
     if(aIdx<0)aIdx=0; if(sIdx<0)sIdx=1; if(lIdx<0)lIdx=2; if(wIdx<0)wIdx=3;
-    console.log('Ajalugu_LV veerud:', (t.cols||[]).map((c,i)=>i+': '+(c.label||c.id||'')+' (type='+(c.type||'?')+')').join(' | '));
-    if(t.rows&&t.rows.length>0){
-      const c0=t.rows[0].c;
-      console.log('Ajalugu_LV esimene rida raw:', (c0||[]).map((cc,j)=>j+'='+(cc&&cc.v!==undefined?JSON.stringify(cc.v):'∅')).join(' | '));
-    }
-    let parsedCount=0;
     for(const row of (t.rows||[])){
       const c=row.c;if(!c)continue;
       const aRaw=c[aIdx]?c[aIdx].v:null;
@@ -1706,9 +1691,7 @@ async function fetchHistory(){
       if(!ts||isNaN(ts))continue;
       if(!lv[sid])lv[sid]=[];
       lv[sid].push({ts, lvl:Math.round(lvl)});
-      parsedCount++;
     }
-    console.log('Ajalugu_LV: parsitud '+parsedCount+' rida, '+Object.keys(lv).length+' jaama');
   }catch(e){console.warn('Läti ajaloo laadimine ebaõnnestus:',e);}
 
   // Sorteeri kõik aja järgi
@@ -1723,21 +1706,16 @@ async function fetchHistory(){
 
 // Leia ajaloo andmed jõe jaoks - kõigepealt vaata jaama nime
 function getHistoryFor(river){
-  if(!river){console.log('getHistoryFor: river puudub');return [];}
-  console.log('getHistoryFor: river =', river.country, river.stJaam, 'lvSid=', river.lvSid);
-  if(!historyCacheEE&&!historyCacheLV){console.log('getHistoryFor: cache puudub');return [];}
-  // Eesti: võti on "Jaam"
+  if(!river)return [];
+  if(!historyCacheEE&&!historyCacheLV)return [];
+  // Eesti: võti on jaama nimi
   if(river.country==='EE'&&historyCacheEE&&river.stJaam){
-    const data=historyCacheEE[river.stJaam]||[];
-    console.log('getHistoryFor EE: jaam='+river.stJaam+', leitud '+data.length+' rida. Saadaval jaamad:', Object.keys(historyCacheEE).slice(0,10));
-    return data;
+    return historyCacheEE[river.stJaam]||[];
   }
+  // Läti: võti on station_id
   if(river.country==='LV'&&historyCacheLV&&river.lvSid){
-    const data=historyCacheLV[river.lvSid]||[];
-    console.log('getHistoryFor LV: sid='+river.lvSid+', leitud '+data.length+' rida. Saadaval sid-id:', Object.keys(historyCacheLV).slice(0,10));
-    return data;
+    return historyCacheLV[river.lvSid]||[];
   }
-  console.log('getHistoryFor: ei saanud andmeid');
   return [];
 }
 
