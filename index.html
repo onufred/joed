@@ -250,6 +250,16 @@
   .ssrch { width:100%; font-size:13px; padding:7px 10px; border-radius:7px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; margin-bottom:6px; }
   .empty { text-align:center; padding:40px 20px; color:var(--text3); font-size:14px; grid-column:1/-1; }
   @media(max-width:600px){main{padding:14px}header{padding:12px 14px}}
+  /* Footer */
+  .app-footer { max-width:1100px; margin:30px auto 20px; padding:20px 24px; border-top:1px solid var(--surface2); display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; font-size:11px; color:var(--text3); font-family:'DM Mono', monospace; }
+  .app-footer a { color:var(--text2); text-decoration:none; border-bottom:1px dotted var(--text3); }
+  .app-footer a:hover { color:var(--accent); border-bottom-color:var(--accent); }
+  .footer-sep { color:var(--text3); }
+  .footer-left { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  @media(max-width:600px){
+    .app-footer { padding:16px 14px; flex-direction:column; align-items:flex-start; gap:8px; }
+    .footer-right { font-size:10px; }
+  }
 </style>
 </head>
 <body>
@@ -284,6 +294,19 @@
   </div>
   <div class="grid" id="grid"></div>
 </main>
+
+<footer class="app-footer">
+  <div class="footer-left">
+    <span>© <a href="https://veeretked.ee" target="_blank">veeretked.ee</a></span>
+    <span class="footer-sep">·</span>
+    <a href="./privaatsus.html">Privaatsus</a>
+    <span class="footer-sep">·</span>
+    <a href="./tingimused.html">Tingimused</a>
+  </div>
+  <div class="footer-right">
+    <span>Andmed: Riigi Ilmateenistus, LVĢMC, Open-Meteo, OSM</span>
+  </div>
+</footer>
 
 <div class="overlay" id="modal">
   <div class="modal">
@@ -2073,6 +2096,15 @@ async function doLogin(){
   if(!window.fb){
     alert('Firebase pole laetud. Proovi uuesti hetke pärast.');
     return;
+  }
+  // Kontrolli, kas kasutaja on juba nõusoleku andnud
+  const consent=localStorage.getItem('rv9_consent');
+  if(!consent){
+    // Näita nõusolekuvormi
+    if(!confirm('Sisselogimisel kogume su nime, e-maili ja profiilipildi (Google\'st) ning hoiame su sõnumeid Firebase\'is.\n\nNõustun privaatsuspoliitikaga ja kasutustingimustega?\n\n(Loe enne nõustumist:\n📄 Privaatsus: ./privaatsus.html\n📄 Tingimused: ./tingimused.html)')){
+      return;
+    }
+    localStorage.setItem('rv9_consent', new Date().toISOString());
   }
   try{
     const result=await window.fb.signInWithPopup(window.fb.auth, window.fb.provider);
