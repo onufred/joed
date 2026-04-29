@@ -1616,6 +1616,30 @@ async function fetchHistory(){
     return {ee:historyCacheEE, lv:historyCacheLV};
   }
   const ee={}, lv={};
+
+  // Universaalne aja parser - käsitleb kõiki gviz formaadeid
+  const parseTs=(raw)=>{
+    if(raw==null)return 0;
+    // 1) Date objekt (kõige tõenäolisem)
+    if(raw instanceof Date)return raw.getTime();
+    // 2) Number (timestamp millisekundites)
+    if(typeof raw==='number')return raw;
+    const s=String(raw);
+    // 3) "Date(2026,3,28,12,36,40)" stringina (kuu on 0-indekseeritud!)
+    let m=s.match(/Date\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/);
+    if(m){
+      return new Date(+m[1], +m[2], +m[3], +m[4], +m[5], +m[6]).getTime();
+    }
+    // 4) "Date(2026,3,28)" lühem variant
+    m=s.match(/Date\((\d+),(\d+),(\d+)\)/);
+    if(m){
+      return new Date(+m[1], +m[2], +m[3]).getTime();
+    }
+    // 5) ISO string või muu Date.parse-iga
+    const t=Date.parse(s);
+    return isNaN(t)?0:t;
+  };
+
   // Eesti
   try{
     const t=await fetchGvizJSON(GVIZ_HIST_EE);
@@ -1630,27 +1654,26 @@ async function fetchHistory(){
       }
     }
     if(aIdx<0)aIdx=0; if(jIdx<0)jIdx=1; if(lIdx<0)lIdx=2; if(wIdx<0)wIdx=3;
+    // DEBUG: vaata mis veerud ja esimene rida
+    console.log('Ajalugu_EE veerud:', (t.cols||[]).map((c,i)=>i+': '+(c.label||c.id||'')+' (type='+(c.type||'?')+')').join(' | '));
+    if(t.rows&&t.rows.length>0){
+      const c0=t.rows[0].c;
+      console.log('Ajalugu_EE esimene rida raw:', (c0||[]).map((cc,j)=>j+'='+(cc&&cc.v!==undefined?JSON.stringify(cc.v):'∅')).join(' | '));
+    }
+    let parsedCount=0;
     for(const row of (t.rows||[])){
       const c=row.c;if(!c)continue;
       const aRaw=c[aIdx]?c[aIdx].v:null;
       const jaam=(c[jIdx]&&c[jIdx].v!=null)?String(c[jIdx].v).trim():'';
       const lvl=c[lIdx]?(typeof c[lIdx].v==='number'?c[lIdx].v:parseFloat(String(c[lIdx].v).replace(',','.'))):null;
       if(!jaam||lvl==null||isNaN(lvl))continue;
-      // Aeg: gviz tagastab Date objekti või string "Date(2026,3,28,12,36,40)" formaadis
-      let ts=0;
-      if(aRaw){
-        const m=String(aRaw).match(/Date\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/);
-        if(m){
-          // gviz: kuu on 0-indekseeritud!
-          ts=new Date(+m[1], +m[2], +m[3], +m[4], +m[5], +m[6]).getTime();
-        } else {
-          ts=Date.parse(String(aRaw));
-        }
-      }
+      const ts=parseTs(aRaw);
       if(!ts||isNaN(ts))continue;
       if(!ee[jaam])ee[jaam]=[];
       ee[jaam].push({ts, lvl:Math.round(lvl)});
+      parsedCount++;
     }
+    console.log('Ajalugu_EE: parsitud '+parsedCount+' rida, '+Object.keys(ee).length+' jaama');
   }catch(e){console.warn('Eesti ajaloo laadimine ebaõnnestus:',e);}
 
   // Läti
@@ -1667,25 +1690,25 @@ async function fetchHistory(){
       }
     }
     if(aIdx<0)aIdx=0; if(sIdx<0)sIdx=1; if(lIdx<0)lIdx=2; if(wIdx<0)wIdx=3;
+    console.log('Ajalugu_LV veerud:', (t.cols||[]).map((c,i)=>i+': '+(c.label||c.id||'')+' (type='+(c.type||'?')+')').join(' | '));
+    if(t.rows&&t.rows.length>0){
+      const c0=t.rows[0].c;
+      console.log('Ajalugu_LV esimene rida raw:', (c0||[]).map((cc,j)=>j+'='+(cc&&cc.v!==undefined?JSON.stringify(cc.v):'∅')).join(' | '));
+    }
+    let parsedCount=0;
     for(const row of (t.rows||[])){
       const c=row.c;if(!c)continue;
       const aRaw=c[aIdx]?c[aIdx].v:null;
       const sid=(c[sIdx]&&c[sIdx].v!=null)?String(c[sIdx].v).trim():'';
       const lvl=c[lIdx]?(typeof c[lIdx].v==='number'?c[lIdx].v:parseFloat(String(c[lIdx].v).replace(',','.'))):null;
       if(!sid||lvl==null||isNaN(lvl))continue;
-      let ts=0;
-      if(aRaw){
-        const m=String(aRaw).match(/Date\((\d+),(\d+),(\d+),(\d+),(\d+),(\d+)\)/);
-        if(m){
-          ts=new Date(+m[1], +m[2], +m[3], +m[4], +m[5], +m[6]).getTime();
-        } else {
-          ts=Date.parse(String(aRaw));
-        }
-      }
+      const ts=parseTs(aRaw);
       if(!ts||isNaN(ts))continue;
       if(!lv[sid])lv[sid]=[];
       lv[sid].push({ts, lvl:Math.round(lvl)});
+      parsedCount++;
     }
+    console.log('Ajalugu_LV: parsitud '+parsedCount+' rida, '+Object.keys(lv).length+' jaama');
   }catch(e){console.warn('Läti ajaloo laadimine ebaõnnestus:',e);}
 
   // Sorteeri kõik aja järgi
@@ -1700,19 +1723,21 @@ async function fetchHistory(){
 
 // Leia ajaloo andmed jõe jaoks - kõigepealt vaata jaama nime
 function getHistoryFor(river){
-  if(!river)return [];
-  if(!historyCacheEE&&!historyCacheLV)return [];
+  if(!river){console.log('getHistoryFor: river puudub');return [];}
+  console.log('getHistoryFor: river =', river.country, river.stJaam, 'lvSid=', river.lvSid);
+  if(!historyCacheEE&&!historyCacheLV){console.log('getHistoryFor: cache puudub');return [];}
   // Eesti: võti on "Jaam"
   if(river.country==='EE'&&historyCacheEE&&river.stJaam){
-    return historyCacheEE[river.stJaam]||[];
+    const data=historyCacheEE[river.stJaam]||[];
+    console.log('getHistoryFor EE: jaam='+river.stJaam+', leitud '+data.length+' rida. Saadaval jaamad:', Object.keys(historyCacheEE).slice(0,10));
+    return data;
   }
-  // Läti: võti on station_id - peame leidma. Lihtsuse mõttes proovime nime järgi.
-  // Aga meil pole otse sid-i river objektis. Vaatame kõiki ajalugu, kus jaama nimi sobib.
-  // Tegelikult Cache_LV'st ei loe me nime - teeme nii: Latvia_Stacijas annab sid->name kaardistuse,
-  // aga see on ainult laadimise ajal. Lihtsuse mõttes lisame riveri objekti laadimise ajal sid välja.
   if(river.country==='LV'&&historyCacheLV&&river.lvSid){
-    return historyCacheLV[river.lvSid]||[];
+    const data=historyCacheLV[river.lvSid]||[];
+    console.log('getHistoryFor LV: sid='+river.lvSid+', leitud '+data.length+' rida. Saadaval sid-id:', Object.keys(historyCacheLV).slice(0,10));
+    return data;
   }
+  console.log('getHistoryFor: ei saanud andmeid');
   return [];
 }
 
